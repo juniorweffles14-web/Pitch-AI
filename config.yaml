@@ -1,0 +1,14 @@
+cookie:
+  expiry_days: 30
+  key: pitch_ai_secret_key
+  name: pitch_ai_cookie
+credentials:
+  usernames:
+    vihan:
+      email: junior.weffles.14@gmail.com
+      first_name: Vihan
+      last_name: Vihan
+      logged_in: false
+      password: $2b$12$go3yh3DCAkoiZTTdIueq0ec44SJxiLzHEMVnjrUOCoSijIR1LhXpm
+      password_hint: f22!
+      roles: null

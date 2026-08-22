@@ -1,0 +1,172 @@
+{
+"drills": [
+{ 
+    "name" : "Passing Diamond", 
+    "tags": ["passing", "teamwork", "movement"], 
+    "difficulty": "beginner", 
+    "duration_minutes": 15, "players_needed": 4, 
+    "description": "Four players form a diamond shape and pass the ball around with one touch", 
+    "setup": "Place 4 cones in a diamond shape, 10 yards apart. One player on each cone.", 
+    "reps": "3 sets of 2 minutes each", 
+    "objective": "Improve passing accuracy and movement off the ball"
+},
+{ 
+    "name": "One Touch Wall Passing", 
+    "tags": ["passing", "ball control", "movement", "one touch", "weak foot", "single"], 
+    "difficulty": "beginner", 
+    "duration_minutes": 5, "players_needed": 1, 
+    "description": "Pass the ball to the rebounder or wall with one touch. Make sure to alternate feet with each pass.", 
+    "setup": "Find a wall or rebounder and pass the ball from about 4-5 feet away.", 
+    "reps": "5 minutes with both feet, or 2.5 minutes with each foot", 
+    "objective": "Improve passing accuracy and ball control"
+},
+{ 
+    "name": "Two Touch Wall Passing", 
+    "tags": ["passing", "ball control", "movement", "receiving", "weak foot","single"], 
+    "difficulty": "beginner", 
+    "duration_minutes": 5, "players_needed": 1, 
+    "description": "Recieve the ball with your foot and touch it across to the other and then pass the ball to the rebounder or wall.", 
+    "setup": "Find a wall or rebounder and pass the ball from about 4-5 feet away.", 
+    "reps": "5 minutes", 
+    "objective": "Improve passing accuracy and ball control"
+},
+{ 
+    "name": "Cone Wall Passing (One Touch)", 
+    "tags": ["passing", "ball control", "movement", "one touch", "weak foot", "cone","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 5, "players_needed": 1, 
+    "description": "Pass the ball to the rebounder or wall with one touch diagonally. Move to the other side of the cone and repeat. Make sure to alternate feet with each pass.", 
+    "setup": "Find a wall or rebounder and pass the ball from about 4-5 feet away. Place a cone about 1-2 feet away from the wall.", 
+    "reps": "5 minutes", 
+    "objective": "Improve passing accuracy and ball control"
+},
+{ 
+    "name": "Cone Wall Passing (Two Touch)", 
+    "tags": ["passing", "ball control", "movement", "recieving", "weak foot", "cone","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 5, "players_needed": 1, 
+    "description": "Pass the ball to the rebounder or wall diagonally. Move to the other side of the cone, recieve, and repeat. Make sure to alternate feet with each pass.", 
+    "setup": "Find a wall or rebounder and pass the ball from about 4-5 feet away. Place a cone about 1-2 feet away from the wall.", 
+    "reps": "5 minutes", 
+    "objective": "Improve passing accuracy and ball control"
+},
+{ 
+    "name": "Juggling", 
+    "tags": ["first touch", "ball control", "recieving", "weak foot", "basics","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 10, "players_needed": 1, 
+    "description": "Juggle the ball in the air using both feet. Try not to let the ball drop.", 
+    "setup": "Find an open space and a ball.", 
+    "reps": "Keep going until time stops.", 
+    "objective": "Improves ball control, first touch, and your weak foot."
+},
+{ 
+    "name": "Wall Juggling", 
+    "tags": ["first touch", "ball control", "recieving", "weak foot", "basics","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 10, "players_needed": 1, 
+    "description": "Juggle the ball in the air using both feet. Pass the ball to the wall so it comes back to you. Try not to let the ball drop.", 
+    "setup": "Find an open space with a wall and a ball.", 
+    "reps": "Keep going until time stops.", 
+    "objective": "Improves ball control, first touch, passing in the air, and your weak foot."
+},
+{ 
+    "name": "Receiving Turn", 
+    "tags": ["first touch", "ball control", "recieving", "weak foot", "receiving", "escaping pressure", "turning","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 10, "players_needed": 1, 
+    "description": "Pass the ball against the rebounder then receive and turn with the ball and then explode with the ball. Try not to turn to close to the cone or too far.", 
+    "setup": "Find an open space with a rebounder. Place a cone 8-10 feet away from the rebounder. Stand about 1 foot in front of the cone.", 
+    "reps": "3 sets of 15 reps for each foot.", 
+    "objective": "Improves passing, first touch, recieving, and your weak foot."
+},
+{
+      "name": "1v1 Shielding Drill",
+      "tags": ["shielding", "defending", "1v1", "defense"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 2,
+      "description": "One player shields the ball while the other tries to win it",
+      "setup": "Mark a 5x5 yard box with cones. Attacker shields inside, defender outside.",
+      "reps": "5 rounds of 30 seconds each",
+      "objective": "Improve body positioning and ball protection under pressure"
+    },
+    {
+      "name": "Cone Dribbling Course",
+      "tags": ["dribbling", "ball control", "agility","single"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 1,
+      "description": "Dribble through a line of cones as fast as possible with close control",
+      "setup": "Place 8 cones in a straight line, 1 yard apart.",
+      "reps": "10 runs, alternating left and right foot",
+      "objective": "Improve close ball control and weak foot ability"
+    },
+    {
+      "name": "Finishing Under Pressure",
+      "tags": ["finishing", "shooting", "composure"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 2,
+      "description": "Striker receives a pass and must shoot before a defender closes them down",
+      "setup": "Striker starts 20 yards from goal. Feeder passes the ball. Defender starts 5 yards behind.",
+      "reps": "10 attempts each side",
+      "objective": "Improve composure and decision making in front of goal"
+    },
+    {
+      "name": "Defensive Shape Drill",
+      "tags": ["defending", "positioning", "shape"],
+      "difficulty": "intermediate",
+      "duration_minutes": 20,
+      "players_needed": 6,
+      "description": "Defensive unit holds their shape while attackers try to find gaps",
+      "setup": "3 defenders vs 3 attackers in half pitch. Defenders must stay compact.",
+      "reps": "4 rounds of 3 minutes",
+      "objective": "Improve defensive communication and positional awareness"
+    },
+{
+      "name": "First Touch Control",
+      "tags": ["first touch", "ball control", "technique"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 2,
+      "description": "Player receives balls from different heights and angles and controls with one touch",
+      "setup": "Two players face each other 10 yards apart. Server throws or kicks varied balls.",
+      "reps": "20 touches each foot",
+      "objective": "Improve first touch in all directions"
+    },
+    {
+      "name": "Pressing Trigger Drill",
+      "tags": ["pressing", "intensity", "positioning"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 4,
+      "description": "Team presses immediately after losing the ball to win it back quickly",
+      "setup": "4v2 in a 15x15 yard box. When possession is lost, both players press immediately.",
+      "reps": "5 rounds of 2 minutes",
+      "objective": "Improve pressing triggers and high intensity defending"
+    },
+    {
+      "name": "Weak Foot Passing Wall",
+      "tags": ["weak foot", "passing", "technique","single"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 1,
+      "description": "Player passes against a wall repeatedly using only their weak foot",
+      "setup": "Stand 5 yards from a wall. Pass and control on the rebound.",
+      "reps": "3 sets of 20 passes",
+      "objective": "Build confidence and accuracy with the weak foot"
+    },
+    {
+      "name": "Figure 8 (Right)",
+      "tags": ["ball mastery", "dribbling", "technique","single"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 1,
+      "description": "Player passes against a wall repeatedly using only their weak foot",
+      "setup": "Stand 5 yards from a wall. Pass and control on the rebound.",
+      "reps": "3 sets of 20 passes",
+      "objective": "Build confidence and accuracy with the weak foot"
+    }
+  ]
+}
