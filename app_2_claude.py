@@ -8,6 +8,8 @@ from yaml.loader import SafeLoader
 import streamlit_authenticator as stauth
 import plotly.graph_objects as go
 
+st.logo("Untitled design.jpg")
+
 st.set_page_config(page_title="Pitch AI", page_icon="⚽", layout="centered")
 
 # ══════════════════════════════════════════════════════════════════════════
