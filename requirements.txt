@@ -1,5 +1,0 @@
-streamlit>=1.36
-groq
-streamlit-authenticator
-pyyaml
-plotly
