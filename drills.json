@@ -1,0 +1,392 @@
+{
+"drills": [
+{ 
+    "name" : "Passing Diamond", 
+    "tags": ["passing", "teamwork", "movement"], 
+    "difficulty": "beginner", 
+    "duration_minutes": 15, "players_needed": 4, 
+    "description": "Four players form a diamond shape and pass the ball around with one touch", 
+    "setup": "Place 4 cones in a diamond shape, 10 yards apart. One player on each cone.", 
+    "reps": "3 sets of 2 minutes each", 
+    "objective": "Improve passing accuracy and movement off the ball"
+},
+{ 
+    "name": "One Touch Wall Passing", 
+    "tags": ["passing", "ball control", "movement", "one touch", "weak foot", "single"], 
+    "difficulty": "beginner", 
+    "duration_minutes": 5, "players_needed": 1, 
+    "description": "Pass the ball to the rebounder or wall with one touch. Make sure to alternate feet with each pass.", 
+    "setup": "Find a wall or rebounder and pass the ball from about 4-5 feet away.", 
+    "reps": "5 minutes with both feet, or 2.5 minutes with each foot", 
+    "objective": "Improve passing accuracy and ball control"
+},
+{ 
+    "name": "Two Touch Wall Passing", 
+    "tags": ["passing", "ball control", "movement", "receiving", "weak foot","single"], 
+    "difficulty": "beginner", 
+    "duration_minutes": 5, "players_needed": 1, 
+    "description": "Recieve the ball with your foot and touch it across to the other and then pass the ball to the rebounder or wall.", 
+    "setup": "Find a wall or rebounder and pass the ball from about 4-5 feet away.", 
+    "reps": "5 minutes", 
+    "objective": "Improve passing accuracy and ball control"
+},
+{ 
+    "name": "Cone Wall Passing (One Touch)", 
+    "tags": ["passing", "ball control", "movement", "one touch", "weak foot", "cone","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 5, "players_needed": 1, 
+    "description": "Pass the ball to the rebounder or wall with one touch diagonally. Move to the other side of the cone and repeat. Make sure to alternate feet with each pass.", 
+    "setup": "Find a wall or rebounder and pass the ball from about 4-5 feet away. Place a cone about 1-2 feet away from the wall.", 
+    "reps": "5 minutes", 
+    "objective": "Improve passing accuracy and ball control"
+},
+{ 
+    "name": "Cone Wall Passing (Two Touch)", 
+    "tags": ["passing", "ball control", "movement", "recieving", "weak foot", "cone","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 5, "players_needed": 1, 
+    "description": "Pass the ball to the rebounder or wall diagonally. Move to the other side of the cone, recieve, and repeat. Make sure to alternate feet with each pass.", 
+    "setup": "Find a wall or rebounder and pass the ball from about 4-5 feet away. Place a cone about 1-2 feet away from the wall.", 
+    "reps": "5 minutes", 
+    "objective": "Improve passing accuracy and ball control"
+},
+{ 
+    "name": "Juggling", 
+    "tags": ["first touch", "ball control", "recieving", "weak foot", "basics","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 10, "players_needed": 1, 
+    "description": "Juggle the ball in the air using both feet. Try not to let the ball drop.", 
+    "setup": "Find an open space and a ball.", 
+    "reps": "Keep going until time stops.", 
+    "objective": "Improves ball control, first touch, and your weak foot."
+},
+{ 
+    "name": "Wall Juggling", 
+    "tags": ["first touch", "ball control", "recieving", "weak foot", "basics","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 10, "players_needed": 1, 
+    "description": "Juggle the ball in the air using both feet. Pass the ball to the wall so it comes back to you. Try not to let the ball drop.", 
+    "setup": "Find an open space with a wall and a ball.", 
+    "reps": "Keep going until time stops.", 
+    "objective": "Improves ball control, first touch, passing in the air, and your weak foot."
+},
+{ 
+    "name": "Receiving Turn", 
+    "tags": ["first touch", "ball control", "recieving", "weak foot", "receiving", "escaping pressure", "turning","single"], 
+    "difficulty": "intermediate", 
+    "duration_minutes": 10, "players_needed": 1, 
+    "description": "Pass the ball against the rebounder then receive and turn with the ball and then explode with the ball. Try not to turn to close to the cone or too far.", 
+    "setup": "Find an open space with a rebounder. Place a cone 8-10 feet away from the rebounder. Stand about 1 foot in front of the cone.", 
+    "reps": "3 sets of 15 reps for each foot.", 
+    "objective": "Improves passing, first touch, recieving, and your weak foot."
+},
+{
+      "name": "1v1 Shielding Drill",
+      "tags": ["shielding", "defending", "1v1", "defense"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 2,
+      "description": "One player shields the ball while the other tries to win it",
+      "setup": "Mark a 5x5 yard box with cones. Attacker shields inside, defender outside.",
+      "reps": "5 rounds of 30 seconds each",
+      "objective": "Improve body positioning and ball protection under pressure"
+    },
+    {
+      "name": "Cone Dribbling Course",
+      "tags": ["dribbling", "ball control", "agility","single"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 1,
+      "description": "Dribble through a line of cones as fast as possible with close control",
+      "setup": "Place 8 cones in a straight line, 1 yard apart.",
+      "reps": "10 runs, alternating left and right foot",
+      "objective": "Improve close ball control and weak foot ability"
+    },
+    {
+      "name": "Finishing Under Pressure",
+      "tags": ["finishing", "shooting", "composure"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 2,
+      "description": "Striker receives a pass and must shoot before a defender closes them down",
+      "setup": "Striker starts 20 yards from goal. Feeder passes the ball. Defender starts 5 yards behind.",
+      "reps": "10 attempts each side",
+      "objective": "Improve composure and decision making in front of goal"
+    },
+    {
+      "name": "Defensive Shape Drill",
+      "tags": ["defending", "positioning", "shape"],
+      "difficulty": "intermediate",
+      "duration_minutes": 20,
+      "players_needed": 6,
+      "description": "Defensive unit holds their shape while attackers try to find gaps",
+      "setup": "3 defenders vs 3 attackers in half pitch. Defenders must stay compact.",
+      "reps": "4 rounds of 3 minutes",
+      "objective": "Improve defensive communication and positional awareness"
+    },
+{
+      "name": "First Touch Control",
+      "tags": ["first touch", "ball control", "technique"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 2,
+      "description": "Player receives balls from different heights and angles and controls with one touch",
+      "setup": "Two players face each other 10 yards apart. Server throws or kicks varied balls.",
+      "reps": "20 touches each foot",
+      "objective": "Improve first touch in all directions"
+    },
+    {
+      "name": "Pressing Trigger Drill",
+      "tags": ["pressing", "intensity", "positioning"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 4,
+      "description": "Team presses immediately after losing the ball to win it back quickly",
+      "setup": "4v2 in a 15x15 yard box. When possession is lost, both players press immediately.",
+      "reps": "5 rounds of 2 minutes",
+      "objective": "Improve pressing triggers and high intensity defending"
+    },
+    {
+      "name": "Weak Foot Passing Wall",
+      "tags": ["weak foot", "passing", "technique","single"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 1,
+      "description": "Player passes against a wall repeatedly using only their weak foot",
+      "setup": "Stand 5 yards from a wall. Pass and control on the rebound.",
+      "reps": "3 sets of 20 passes",
+      "objective": "Build confidence and accuracy with the weak foot"
+    },
+    {
+      "name": "Figure 8 (Right)",
+      "tags": ["ball mastery", "dribbling", "technique","single"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 1,
+      "description": "Player passes against a wall repeatedly using only their weak foot",
+      "setup": "Stand 5 yards from a wall. Pass and control on the rebound.",
+      "reps": "3 sets of 20 passes",
+      "objective": "Build confidence and accuracy with the weak foot"
+    },
+    {
+      "name": "Passing Gates Challenge",
+      "tags": ["passing", "accuracy", "movement"],
+      "difficulty": "beginner",
+      "duration_minutes": 15,
+      "players_needed": 2,
+      "description": "Two players pass the ball through different cone gates while moving to new passing angles.",
+      "setup": "Create 4 cone gates, each 2 yards wide, inside a 15x15 yard area. Position two players with one ball.",
+      "reps": "4 sets of 10 successful passes",
+      "objective": "Improve passing accuracy, weight of pass, and movement into open passing lanes"
+    },
+    {
+      "name": "First Touch Escape Gates",
+      "tags": ["first touch", "ball control", "movement"],
+      "difficulty": "beginner",
+      "duration_minutes": 12,
+      "players_needed": 2,
+      "description": "Receive a pass and use the first touch to guide the ball through an open cone gate.",
+      "setup": "Place 3 cone gates around the receiving player. Position a passing partner 8 yards away.",
+      "reps": "4 sets of 12 receptions",
+      "objective": "Improve directional first touch and control into open space"
+    },
+    {
+      "name": "Inside Outside Dribbling",
+      "tags": ["dribbling", "ball mastery", "weak foot", "single"],
+      "difficulty": "beginner",
+      "duration_minutes": 12,
+      "players_needed": 1,
+      "description": "Move the ball forward using alternating inside and outside touches with the same foot.",
+      "setup": "Create a 15 yard straight channel using cones. Start at one end with the ball.",
+      "reps": "5 runs per foot",
+      "objective": "Improve close control, foot coordination, and dribbling rhythm"
+    },
+    {
+      "name": "Lateral Ball Roll Mastery",
+      "tags": ["ball mastery", "dribbling", "coordination", "single"],
+      "difficulty": "beginner",
+      "duration_minutes": 10,
+      "players_needed": 1,
+      "description": "Use the sole of each foot to roll the ball laterally while moving across a marked area.",
+      "setup": "Create a 5x5 yard square with cones and start in the center.",
+      "reps": "4 sets of 45 seconds",
+      "objective": "Improve sole control, coordination, and close ball manipulation"
+    },
+    {
+      "name": "Target Shooting",
+      "tags": ["shooting", "finishing", "accuracy"],
+      "difficulty": "beginner",
+      "duration_minutes": 20,
+      "players_needed": 1,
+      "description": "Shoot toward designated target zones in the goal using both feet.",
+      "setup": "Place 4 target markers inside the goal. Position balls 12 yards from the goal.",
+      "reps": "4 sets of 10 shots",
+      "objective": "Improve shooting accuracy, technique, and finishing consistency"
+    },
+    {
+      "name": "One Touch Passing Triangle",
+      "tags": ["passing", "one touch", "teamwork"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 3,
+      "description": "Three players pass the ball around a triangle using one touch while maintaining proper body positioning.",
+      "setup": "Arrange 3 cones in a triangle, 8 yards apart. Position one player at each cone.",
+      "reps": "4 sets of 3 minutes each",
+      "objective": "Improve quick passing, body orientation, and decision-making"
+    },
+    {
+      "name": "Scanning Before Receiving",
+      "tags": ["scanning", "awareness", "first touch"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 3,
+      "description": "A receiving player checks their surroundings before receiving a pass and plays toward the indicated target.",
+      "setup": "Position one receiver in the center and two passing players 10 yards apart. Use colored cones as directional targets.",
+      "reps": "4 sets of 12 receptions",
+      "objective": "Improve visual scanning, spatial awareness, and decision-making before receiving the ball"
+    },
+    {
+      "name": "Defensive Positioning Shadow Drill",
+      "tags": ["defending", "positioning", "footwork"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 2,
+      "description": "A defender mirrors an attacking player's movements while maintaining appropriate defensive distance and body positioning.",
+      "setup": "Create a 10x10 yard square. Position the attacker and defender facing each other.",
+      "reps": "5 sets of 90 seconds each",
+      "objective": "Improve defensive positioning, lateral movement, and reaction speed"
+    },
+    {
+      "name": "One Versus One Attacking",
+      "tags": ["dribbling", "attacking", "decision making"],
+      "difficulty": "intermediate",
+      "duration_minutes": 20,
+      "players_needed": 2,
+      "description": "An attacker attempts to beat a defender and dribble through one of two scoring gates.",
+      "setup": "Create a 15x12 yard area with two cone gates at the opposite end.",
+      "reps": "4 sets of 5 attacking attempts per player",
+      "objective": "Develop confidence in one-on-one situations, change of direction, and attacking decisions"
+    },
+    {
+      "name": "Off Ball Movement Gates",
+      "tags": ["off ball movement", "positioning", "passing"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 3,
+      "description": "Players move into open passing lanes and receive passes through designated cone gates.",
+      "setup": "Create a 20x20 yard area with 4 passing gates. Position three players inside the area.",
+      "reps": "4 sets of 3 minutes each",
+      "objective": "Improve movement off the ball, passing angles, and spatial awareness"
+    },
+    {
+      "name": "Rondo Four Versus One",
+      "tags": ["passing", "possession", "decision making"],
+      "difficulty": "intermediate",
+      "duration_minutes": 20,
+      "players_needed": 5,
+      "description": "Four attacking players maintain possession while one defender attempts to intercept the ball.",
+      "setup": "Create a 10x10 yard square. Position four attackers around the outside and one defender inside.",
+      "reps": "5 sets of 3 minutes with rotating defenders",
+      "objective": "Improve quick passing, possession retention, scanning, and decision-making under pressure"
+    },
+    {
+      "name": "First Touch Directional Control",
+      "tags": ["first touch", "ball control", "positioning"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 2,
+      "description": "Receive a pass and use the first touch to move the ball toward a designated direction before returning it.",
+      "setup": "Place 4 colored cones around the receiving player. Position the passing partner 10 yards away.",
+      "reps": "4 sets of 12 directional receptions",
+      "objective": "Improve directional first touch, body positioning, and control into open space"
+    },
+    {
+      "name": "Quick Release Shooting",
+      "tags": ["shooting", "finishing", "reaction"],
+      "difficulty": "intermediate",
+      "duration_minutes": 20,
+      "players_needed": 2,
+      "description": "Receive a pass near the penalty area and shoot within two touches.",
+      "setup": "Position a feeder 15 yards from goal and a shooter near the edge of the penalty area.",
+      "reps": "5 sets of 8 shots",
+      "objective": "Improve shooting speed, finishing accuracy, and composure under time pressure"
+    },
+    {
+      "name": "Defensive Recovery Runs",
+      "tags": ["defending", "positioning", "speed"],
+      "difficulty": "intermediate",
+      "duration_minutes": 15,
+      "players_needed": 2,
+      "description": "A defender starts behind an attacker and sprints to recover defensive positioning before the attacker reaches the scoring zone.",
+      "setup": "Create a 25 yard channel with a scoring gate at one end. Position the defender 5 yards behind the attacker.",
+      "reps": "4 sets of 5 recovery runs",
+      "objective": "Improve recovery speed, defensive angles, and positioning during transitions"
+    },
+    {
+      "name": "Two Versus One Decision Making",
+      "tags": ["decision making", "passing", "attacking"],
+      "difficulty": "intermediate",
+      "duration_minutes": 20,
+      "players_needed": 3,
+      "description": "Two attackers attempt to beat one defender by choosing between passing, dribbling, or shooting.",
+      "setup": "Create a 20x15 yard attacking area with a small goal at one end.",
+      "reps": "5 sets of 4 attacking sequences",
+      "objective": "Improve attacking decisions, timing of passes, and recognition of defensive gaps"
+    },
+    {
+      "name": "Advanced Rondo Five Versus Two",
+      "tags": ["possession", "scanning", "passing"],
+      "difficulty": "advanced",
+      "duration_minutes": 20,
+      "players_needed": 7,
+      "description": "Five attackers maintain possession against two defenders using a maximum of two touches.",
+      "setup": "Create a 12x12 yard square. Position five attackers around the area and two defenders inside.",
+      "reps": "5 sets of 3 minutes with defender rotation",
+      "objective": "Improve possession under pressure, rapid decision-making, and awareness of passing options"
+    },
+    {
+      "name": "Third Man Passing Combination",
+      "tags": ["passing", "teamwork", "off ball movement"],
+      "difficulty": "advanced",
+      "duration_minutes": 20,
+      "players_needed": 3,
+      "description": "Three players execute a passing sequence where the third player makes a timed run to receive the final pass.",
+      "setup": "Arrange 3 cones in a triangle, 12 yards apart. Position one player at each cone.",
+      "reps": "5 sets of 8 passing combinations",
+      "objective": "Improve combination play, timing of runs, and awareness of third-man passing opportunities"
+    },
+    {
+      "name": "Pressing and Defensive Cover",
+      "tags": ["defending", "pressing", "positioning"],
+      "difficulty": "advanced",
+      "duration_minutes": 20,
+      "players_needed": 4,
+      "description": "Two defenders coordinate pressing and covering movements against two attackers attempting to maintain possession.",
+      "setup": "Create a 20x15 yard area. Position two attackers with one ball and two defenders opposite them.",
+      "reps": "5 sets of 3 minutes with role rotation",
+      "objective": "Improve coordinated pressing, defensive communication, and cover positioning"
+    },
+    {
+      "name": "Transition Attack and Recovery",
+      "tags": ["transition", "decision making", "defending"],
+      "difficulty": "advanced",
+      "duration_minutes": 25,
+      "players_needed": 6,
+      "description": "Teams immediately switch between attacking and defending after possession changes.",
+      "setup": "Create a 30x20 yard field with two small goals. Divide six players into two teams of three.",
+      "reps": "5 sets of 4 minutes each",
+      "objective": "Improve reaction to possession changes, counterattacking decisions, and defensive recovery"
+    },
+    {
+      "name": "Pressure Finishing Challenge",
+      "tags": ["shooting", "finishing", "decision making"],
+      "difficulty": "advanced",
+      "duration_minutes": 20,
+      "players_needed": 3,
+      "description": "An attacker receives a pass under defensive pressure and must create a shooting opportunity within three seconds.",
+      "setup": "Position a feeder outside the penalty area, an attacker near the penalty spot, and a defender behind the attacker.",
+      "reps": "5 sets of 6 finishing attempts",
+      "objective": "Improve finishing under pressure, quick decision-making, and composure in attacking situations"
+    }
+  ]
+}

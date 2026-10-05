@@ -1,0 +1,10 @@
+streamlit>=1.40
+groq
+streamlit-authenticator
+pyyaml
+plotly
+pillow
+bcrypt
+opencv-python-headless
+PyYAML
+secure-smtplib
