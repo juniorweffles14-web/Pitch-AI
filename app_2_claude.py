@@ -188,13 +188,13 @@ RESET_CODE_TTL_SECONDS = 600  # 10 minutes
 
 
 # ─── Email Config ───
-SENDER_EMAIL = "junior.weffles.14@gmail.com"  # Change this
+SENDER_EMAIL = "pitch.ai.coach@gmail.com"  # Change this
 SENDER_PASSWORD = "richpoodle828"  # Change this
 
 def send_reset_code(receiver_email, code):
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Your Fitz Password Reset Code"  # Change to Soccer AI Coach for boy
+        msg["Subject"] = "Your Pitch AI reset code"  # Change to Soccer AI Coach for boy
         msg["From"] = SENDER_EMAIL
         msg["To"] = receiver_email
 
@@ -202,7 +202,7 @@ def send_reset_code(receiver_email, code):
         <html>
         <body style="font-family: Arial, sans-serif; background-color: #FFF8F9; padding: 30px;">
             <div style="max-width: 480px; margin: auto; background: white; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
-                <h2 style="color: #D6336C;">Fitz ✦</h2>
+                <h2 style="color: #D6336C;">Pitch Ai </h2>
                 <p style="color: #333;">Hi there! You requested a password reset.</p>
                 <p style="color: #333;">Your reset code is:</p>
                 <div style="text-align: center; margin: 24px 0;">
