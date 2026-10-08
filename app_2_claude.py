@@ -189,7 +189,7 @@ RESET_CODE_TTL_SECONDS = 600  # 10 minutes
 
 # ─── Email Config ───
 SENDER_EMAIL = "pitch.ai.coach@gmail.com"  # Change this
-SENDER_PASSWORD = "richpoodle828"  # Change this
+SENDER_PASSWORD = "pnus wwvq vvbx ywko"  # Change this
 
 def send_reset_code(receiver_email, code):
     try:
