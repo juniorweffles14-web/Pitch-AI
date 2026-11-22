@@ -2,8 +2,14 @@ import streamlit as st
 from groq import Groq
 import json
 import os
+import re
 import base64
+import io
 import html
+import inspect
+import secrets
+import smtplib
+import time
 from PIL import Image
 from datetime import datetime, date
 import yaml
@@ -11,11 +17,10 @@ from yaml.loader import SafeLoader
 import streamlit_authenticator as stauth
 import plotly.graph_objects as go
 import bcrypt
-import smtplib
-import secrets
-import time
-import cv2
-import random
+try:
+    import cv2
+except ImportError:  # app still works (without video frames) if OpenCV is missing
+    cv2 = None
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -28,6 +33,34 @@ def _find_asset(*names):
         if os.path.exists(p):
             return p
     return None
+
+
+def _secret(name, default=""):
+    """Read from st.secrets or env vars without crashing when no secrets.toml exists."""
+    try:
+        if name in st.secrets:
+            return st.secrets[name]
+    except Exception:
+        pass
+    return os.environ.get(name, default)
+
+
+def _esc(s):
+    return html.escape(str(s))
+
+
+# Streamlit renamed use_container_width -> width="stretch". Pick whichever this install supports.
+def _stretch_kwargs(fn):
+    try:
+        if "width" in inspect.signature(fn).parameters:
+            return {"width": "stretch"}
+    except (TypeError, ValueError):
+        pass
+    return {"use_container_width": True}
+
+
+BTN_STRETCH = _stretch_kwargs(st.button)
+CHART_STRETCH = _stretch_kwargs(st.plotly_chart)
 
 
 # Favicon: your "Untitled design" logo (favicon.png is a transparent, cropped copy of it).
@@ -185,34 +218,41 @@ st.markdown(CSS, unsafe_allow_html=True)
 # PASSWORD RESET — emailed verification code
 # ══════════════════════════════════════════════════════════════════════════
 RESET_CODE_TTL_SECONDS = 600  # 10 minutes
+RESET_MAX_ATTEMPTS = 5
+MIN_PASSWORD_LEN = 8
 
+# Set these in .streamlit/secrets.toml (or as environment variables):
+#   SENDER_EMAIL = "you@gmail.com"
+#   SENDER_PASSWORD = "your-new-gmail-app-password"
+SENDER_EMAIL = _secret("SENDER_EMAIL")
+SENDER_PASSWORD = str(_secret("SENDER_PASSWORD")).replace(" ", "")
 
-# ─── Email Config ───
-SENDER_EMAIL = "pitch.ai.coach@gmail.com"  # Change this
-SENDER_PASSWORD = "pnus wwvq vvbx ywko"  # Change this
 
 def send_reset_code(receiver_email, code):
+    if not SENDER_EMAIL or not SENDER_PASSWORD:
+        st.error("Email sending isn't configured. Set SENDER_EMAIL and SENDER_PASSWORD in your secrets.")
+        return False
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Your Pitch AI reset code"  # Change to Soccer AI Coach for boy
+        msg["Subject"] = "Your Pitch AI reset code"
         msg["From"] = SENDER_EMAIL
         msg["To"] = receiver_email
 
         html_body = f"""
         <html>
-        <body style="font-family: Arial, sans-serif; background-color: #FFF8F9; padding: 30px;">
-            <div style="max-width: 480px; margin: auto; background: white; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
-                <h2 style="color: #D6336C;">Pitch Ai </h2>
-                <p style="color: #333;">Hi there! You requested a password reset.</p>
-                <p style="color: #333;">Your reset code is:</p>
+        <body style="font-family: Arial, sans-serif; background-color: #0a0e17; padding: 30px;">
+            <div style="max-width: 480px; margin: auto; background: #111a2b; border-radius: 16px; padding: 32px;">
+                <h2 style="color: #22d3ee;">⚽ Pitch AI</h2>
+                <p style="color: #f2f5fa;">Hi there! You requested a password reset.</p>
+                <p style="color: #f2f5fa;">Your reset code is:</p>
                 <div style="text-align: center; margin: 24px 0;">
-                    <span style="font-size: 2.5rem; font-weight: 800; letter-spacing: 8px; color: #D6336C;">
+                    <span style="font-size: 2.5rem; font-weight: 800; letter-spacing: 8px; color: #22d3ee;">
                         {code}
                     </span>
                 </div>
-                <p style="color: #888; font-size: 0.85rem;">This code expires in 10 minutes. If you did not request this, ignore this email.</p>
-                <hr style="border: none; border-top: 1px solid #F0E0E4; margin: 24px 0;">
-                <p style="color: #bbb; font-size: 0.75rem;">Fitz — Your Personal AI Stylist</p>
+                <p style="color: #8b98ad; font-size: 0.85rem;">This code expires in {RESET_CODE_TTL_SECONDS // 60} minutes. If you did not request this, ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #1c2740; margin: 24px 0;">
+                <p style="color: #8b98ad; font-size: 0.75rem;">Pitch AI — Your Personal AI Football Coach</p>
             </div>
         </body>
         </html>
@@ -220,26 +260,144 @@ def send_reset_code(receiver_email, code):
 
         msg.attach(MIMEText(html_body, "html"))
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as server:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
 
         return True
 
-    except Exception as e:
-        st.error(f"Failed to send email: {e}")
+    except Exception:
+        st.error("Couldn't send the reset email. Please try again later.")
         return False
 
 
+RESET_STATE_KEYS = ("reset_code_sent", "reset_code", "reset_code_username", "reset_code_expiry", "reset_attempts")
+
+
 def _clear_reset_state():
-    for k in ("reset_stage", "reset_username", "reset_email", "reset_code", "reset_code_expires"):
+    for k in RESET_STATE_KEYS:
         st.session_state.pop(k, None)
+
+
+@st.cache_resource
+def _reset_request_log():
+    return {}  # shared across sessions for the life of the server process
+
+
+def _reset_rate_ok(username, max_per_hour=3):
+    """Limit reset emails per username (counted for any typed name, so it doesn't reveal which exist)."""
+    now = time.time()
+    log = _reset_request_log()
+    hits = [t for t in log.get(username, []) if now - t < 3600]
+    if len(hits) >= max_per_hour:
+        log[username] = hits
+        return False
+    hits.append(now)
+    log[username] = hits
+    return True
+
+
+def _password_problem(pw):
+    if len(pw) < MIN_PASSWORD_LEN:
+        return f"Password must be at least {MIN_PASSWORD_LEN} characters."
+    if not (re.search(r"[A-Za-z]", pw) and re.search(r"\d", pw)):
+        return "Password must include at least one letter and one number."
+    return None
+
+
+@st.cache_data(show_spinner=False)
+def _plain_data_uri(path, mtime):
+    """Image file -> data URI (mtime is only here so the cache refreshes when the file changes)."""
+    mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
+    with open(path, "rb") as f:
+        return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
+
+
+@st.cache_data(show_spinner=False)
+def _logo_data_uri(path, mtime):
+    """logo.png with its empty transparent margin trimmed off, as a data URI ('' if it can't be read)."""
+    try:
+        im = Image.open(path).convert("RGBA")
+        bbox = im.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
+        if bbox:
+            im = im.crop(bbox)
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return ""
+
+
+def logo_html(height=64, center=False):
+    """The Pitch AI logo (logo.png next to this file); falls back to a text logo if it's missing."""
+    p = _find_asset("logo.png", "logo.jpg", "logo.jpeg")
+    uri = _logo_data_uri(p, os.path.getmtime(p)) if p else ""
+    if uri:
+        margin = "margin:0 auto;" if center else ""
+        return f'<img src="{uri}" alt="Pitch AI" style="height:{height}px;width:auto;display:block;{margin}">'
+    return '<div class="pitch-logo">⚽ PITCH <span>AI</span></div>'
+
+
+def _set_auth_view(view):
+    st.session_state.auth_view = view
+
+
+AUTH_SUBTITLES = {
+    "login": "Welcome back. Log in to continue.",
+    "signup": "Create your account to get started.",
+    "reset": "Reset your password with a code sent to your email.",
+}
+
+AUTH_CSS = """
+<style>
+.st-key-auth_back button{ background:transparent !important; color:#8b98ad !important;
+  border:1px solid rgba(34,211,238,.25) !important; }
+</style>
+"""
+
+WELCOME_CSS = """
+<style>
+.stApp{ background:linear-gradient(180deg,#000d1a 0%,#021724 100%) fixed !important; }
+.block-container{ padding-top:1rem !important; }
+.welcome-hero img{ width:100%; display:block;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 5%,#000 92%,transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0,#000 5%,#000 92%,transparent 100%); }
+.st-key-welcome_start button, .st-key-welcome_login button{
+  width:100%; height:3.3rem; border-radius:999px !important; font-weight:800 !important; letter-spacing:.08em; }
+.st-key-welcome_start button{ background:#00e5ff !important; color:#03121c !important; border:none !important; }
+.st-key-welcome_start button p{ color:#03121c !important; font-weight:800; letter-spacing:.08em; }
+.st-key-welcome_login button{ background:rgba(3,14,26,.6) !important; color:#f2f5fa !important;
+  border:1.5px solid #22d3ee !important; }
+.st-key-welcome_login button p{ color:#f2f5fa !important; font-weight:800; letter-spacing:.08em; }
+</style>
+"""
+
+
+def render_welcome():
+    """First screen: GET STARTED -> sign-up screen, LOG IN -> log-in screen."""
+    st.markdown(WELCOME_CSS, unsafe_allow_html=True)
+    hero = _find_asset("landing_hero.png", "landing_hero.jpg")
+    _, mid, _ = st.columns([1, 2.4, 1])
+    with mid:
+        if hero:
+            uri = _plain_data_uri(hero, os.path.getmtime(hero))
+            st.markdown(f'<div class="welcome-hero"><img src="{uri}" alt="Pitch AI Coach"></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(
+                logo_html(120, center=True)
+                + '<div class="auth-sub">Analyze. Train. Improve.<br>Your Personal AI Soccer Coach.</div>',
+                unsafe_allow_html=True,
+            )
+        st.button("GET STARTED", key="welcome_start", on_click=_set_auth_view, args=("signup",))
+        st.button("LOG IN", key="welcome_login", on_click=_set_auth_view, args=("login",))
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # AUTH
 # ══════════════════════════════════════════════════════════════════════════
-if not os.path.exists("config.yaml"):
+CONFIG_PATH = os.path.join(APP_DIR, "config.yaml")
+
+if not os.path.exists(CONFIG_PATH):
     st.error(
         "`config.yaml` not found. Create one for streamlit-authenticator, e.g.:\n\n"
         "```yaml\ncredentials:\n  usernames: {}\ncookie:\n  name: pitch_ai_cookie\n"
@@ -247,20 +405,40 @@ if not os.path.exists("config.yaml"):
     )
     st.stop()
 
-with open("config.yaml", "r") as f:
+with open(CONFIG_PATH, "r") as f:
     config = yaml.load(f, Loader=SafeLoader)
+
+
+def save_config():
+    with open(CONFIG_PATH, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
+
 
 authenticator = stauth.Authenticate(
     config["credentials"], config["cookie"]["name"], config["cookie"]["key"], config["cookie"]["expiry_days"]
 )
 
 if st.session_state.get("authentication_status") is not True:
-    st.markdown('<div class="auth-logo">⚽ PITCH <span>AI</span></div>', unsafe_allow_html=True)
-    st.markdown('<div class="auth-sub">Your personal AI football coach. Login or create an account to continue.</div>', unsafe_allow_html=True)
+    auth_view = st.session_state.get("auth_view", "welcome")
+
+    if auth_view not in AUTH_SUBTITLES:  # "welcome" (the first screen)
+        # Returning users with a valid "remember me" cookie skip the welcome screen.
+        try:
+            authenticator.login(location="unrendered")
+        except Exception:
+            pass  # older streamlit-authenticator versions: the cookie is checked by the Log in form instead
+        if st.session_state.get("authentication_status") is True:
+            st.rerun()
+        render_welcome()
+        st.stop()
+
+    st.markdown(AUTH_CSS, unsafe_allow_html=True)
+    st.button("← Back", key="auth_back", on_click=_set_auth_view, args=("login" if auth_view == "reset" else "welcome",))
+    st.markdown(logo_html(110, center=True), unsafe_allow_html=True)
+    st.markdown(f'<div class="auth-sub">{AUTH_SUBTITLES[auth_view]}</div>', unsafe_allow_html=True)
 
     with st.container(border=True):
-        tab1, tab2, tab3 = st.tabs(["Login", "Sign Up", "Reset Password"])
-        with tab1:
+        if auth_view == "login":
             try:
                 authenticator.login()
             except Exception as e:
@@ -269,48 +447,54 @@ if st.session_state.get("authentication_status") is not True:
                 st.error("Username or password is incorrect.")
             elif st.session_state.get("authentication_status") is None:
                 st.caption("Enter your credentials to continue.")
-        with tab2:
+            st.button("Forgot password?", key="to_reset", on_click=_set_auth_view, args=("reset",))
+            st.button("New here? Create an account", key="to_signup", on_click=_set_auth_view, args=("signup",))
+        elif auth_view == "signup":
             try:
                 result = authenticator.register_user()
                 if result:
                     email, username, name = result
                     if email:
-                        st.success("Account created! Head to the Login tab to sign in.")
-                        with open("config.yaml", "w") as f:
-                            yaml.dump(config, f, default_flow_style=False)
+                        st.success("Account created! Tap “Log in” below to sign in.")
+                        save_config()
             except Exception as e:
                 st.error(e)
-        with tab3:
+            st.button("Already have an account? Log in", key="to_login", on_click=_set_auth_view, args=("login",))
+        else:  # reset
             st.subheader("🔐 Reset Password")
-
             st.write("Enter your username and we'll send a reset code to your registered email.")
 
-            reset_username = st.text_input("Username", key="reset_username")
+            reset_username = st.text_input("Username", key="reset_username_input").strip()
 
             if st.button("Send Reset Code 📧", key="send_code_btn"):
                 if not reset_username:
                     st.error("Please enter your username.")
-                elif reset_username not in config["credentials"]["usernames"]:
-                    st.error("Username not found.")
                 else:
-                    user_data = config["credentials"]["usernames"][reset_username]
-                    user_email = user_data.get("email", "")
+                    usernames = config["credentials"]["usernames"]
+                    account_key = reset_username if reset_username in usernames else reset_username.lower()
+                    user_data = usernames.get(account_key)
+                    user_email = (user_data or {}).get("email", "")
 
-                    if not user_email:
-                        st.error("No email found for this account. Please contact support.")
-                    else:
-                        code = str(random.randint(100000, 999999))
-                        st.session_state.reset_code = code
-                        st.session_state.reset_code_username = reset_username
-                        st.session_state.reset_code_expiry = datetime.now().timestamp() + 600  # 10 mins
+                    _clear_reset_state()
+                    sent_ok = True
+                    if not _reset_rate_ok(reset_username.lower()):
+                        st.error("Too many reset requests. Please wait a while and try again.")
+                        sent_ok = False
+                    elif user_data and user_email:
+                        code = str(secrets.randbelow(900000) + 100000)
+                        sent_ok = send_reset_code(user_email, code)
+                        if sent_ok:
+                            st.session_state.reset_code = code
+                            st.session_state.reset_code_username = account_key
+                            st.session_state.reset_code_expiry = time.time() + RESET_CODE_TTL_SECONDS
 
-                        if send_reset_code(user_email, code):
-                            masked_email = user_email[:3] + "***@" + user_email.split("@")[1]
-                            st.success(f"Reset code sent to {masked_email}!")
-                            st.session_state.reset_code_sent = True
+                    if sent_ok:
+                        # Same message whether or not the account exists, so usernames can't be probed.
+                        st.success("If that account exists and has an email on file, a reset code has been sent.")
+                        st.session_state.reset_code_sent = True
+                        st.session_state.reset_attempts = 0
 
             if st.session_state.get("reset_code_sent"):
-
                 st.divider()
 
                 entered_code = st.text_input("Enter the 6 digit code from your email", key="entered_code")
@@ -318,51 +502,49 @@ if st.session_state.get("authentication_status") is not True:
                 confirm_password = st.text_input("Confirm New Password", type="password", key="confirm_password")
 
                 if st.button("Reset Password ✅", key="reset_final_btn"):
+                    stored_code = st.session_state.get("reset_code")
+                    stored_user = st.session_state.get("reset_code_username")
+                    expiry = st.session_state.get("reset_code_expiry", 0) or 0
+
                     if not entered_code or not new_password or not confirm_password:
                         st.error("Please fill in all fields.")
 
-                    elif datetime.now().timestamp() > st.session_state.get("reset_code_expiry", 0):
-                        st.error("Reset code has expired. Please request a new one.")
-                        st.session_state.reset_code_sent = False
+                    elif st.session_state.get("reset_attempts", 0) >= RESET_MAX_ATTEMPTS:
+                        st.error("Too many incorrect attempts. Please request a new code.")
+                        _clear_reset_state()
 
-                    elif entered_code != st.session_state.get("reset_code"):
+                    elif not stored_code or not stored_user or time.time() > expiry:
+                        st.error("That code is invalid or has expired. Please request a new one.")
+                        _clear_reset_state()
+
+                    elif not secrets.compare_digest(entered_code.strip(), stored_code):
+                        st.session_state.reset_attempts = st.session_state.get("reset_attempts", 0) + 1
                         st.error("Incorrect code. Please try again.")
 
                     elif new_password != confirm_password:
                         st.error("Passwords do not match.")
 
-                    elif len(new_password) < 6:
-                        st.error("Password must be at least 6 characters.")
+                    elif _password_problem(new_password):
+                        st.error(_password_problem(new_password))
 
                     else:
-                        import bcrypt
-                        hashed = bcrypt.hashpw(
-                            new_password.encode(),
-                            bcrypt.gensalt()
-                        ).decode()
-
-                        config["credentials"]["usernames"][
-                            st.session_state.reset_code_username
-                        ]["password"] = hashed
-
-                        with open("config.yaml", "w") as f:
-                            yaml.dump(config, f, default_flow_style=False)
-
+                        hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+                        config["credentials"]["usernames"][stored_user]["password"] = hashed
+                        save_config()
                         st.success("✅ Password reset successfully! Please login with your new password.")
-
-                        # Clear session state
-                        st.session_state.reset_code_sent = False
-                        st.session_state.reset_code = None
-                        st.session_state.reset_code_username = None
-                        st.session_state.reset_code_expiry = None
+                        _clear_reset_state()
     st.stop()
 
-CURRENT_USER = st.session_state.get("username", "player")
+# Signed in. After a log-out the user starts from the welcome screen again.
+st.session_state.auth_view = "welcome"
+
+# Sanitize the username before it is used in file paths.
+CURRENT_USER = re.sub(r"[^A-Za-z0-9_.-]", "_", str(st.session_state.get("username", "player"))) or "player"
 
 # ══════════════════════════════════════════════════════════════════════════
 # API CLIENT — key loaded from secrets/env, never hardcoded
 # ══════════════════════════════════════════════════════════════════════════
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEY", ""))
+GROQ_API_KEY = _secret("GROQ_API_KEY")
 if not GROQ_API_KEY:
     st.error(
         "No Groq API key found. Add `GROQ_API_KEY = \"your-key\"` to "
@@ -370,13 +552,16 @@ if not GROQ_API_KEY:
     )
     st.stop()
 client = Groq(api_key=GROQ_API_KEY)
-MODEL = "openai/gpt-oss-120b"
-VISION_MODEL = "qwen/qwen3.8-27b"  # multimodal — used when match frames are attached
+MODEL = _secret("TEXT_MODEL", "openai/gpt-oss-120b")
+# Multimodal model used when match frames are attached (max 3 images per request).
+# Groq retired Llama 4 Scout on 2026-07-17; qwen/qwen3.6-27b is the vision replacement it lists (a Preview model,
+# so it can change). Override with VISION_MODEL in your secrets if Groq's model list changes.
+VISION_MODEL = _secret("VISION_MODEL", "qwen/qwen3.6-27b")
 
 # ══════════════════════════════════════════════════════════════════════════
 # STORAGE — per-user JSON files + uploaded video files on disk
 # ══════════════════════════════════════════════════════════════════════════
-DATA_DIR = "pitch_ai_data"
+DATA_DIR = os.path.join(APP_DIR, "pitch_ai_data")
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads", CURRENT_USER)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -386,19 +571,33 @@ TRAINING_LOG_FILE = os.path.join(DATA_DIR, f"training_log_{CURRENT_USER}.json")
 
 
 def load_json(path, default):
+    """Read JSON; return `default` if the file is missing, empty, or corrupted."""
     if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            try:  # keep the unreadable file instead of silently overwriting it on the next save
+                os.replace(path, path + ".corrupt")
+            except OSError:
+                pass
+            return default
+        except OSError:
+            return default
     return default
 
 
 def save_json(path, data):
-    with open(path, "w") as f:
+    """Atomic write so a crash mid-save can't leave a half-written file."""
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(data, f, indent=2)
+    os.replace(tmp, path)
 
 
 def load_sessions():
-    return load_json(SESSIONS_FILE, [])
+    data = load_json(SESSIONS_FILE, [])
+    return data if isinstance(data, list) else []
 
 
 def save_session(session):
@@ -407,8 +606,19 @@ def save_session(session):
     save_json(SESSIONS_FILE, sessions)
 
 
+POSITIONS = ["Goalkeeper", "Defender", "Midfielder", "Winger", "Striker"]
+DEFAULT_PROFILE = {"name": "", "position": "Midfielder", "jersey_number": 10, "completed_drills": []}
+
+
+def _position_index(pos):
+    return POSITIONS.index(pos) if pos in POSITIONS else POSITIONS.index("Midfielder")
+
+
 def load_profile():
-    return load_json(PROFILE_FILE, {"name": "", "position": "Midfielder", "jersey_number": 10, "completed_drills": []})
+    data = load_json(PROFILE_FILE, {})
+    if not isinstance(data, dict):
+        data = {}
+    return {**DEFAULT_PROFILE, **data}
 
 
 def save_profile(p):
@@ -416,7 +626,8 @@ def save_profile(p):
 
 
 def load_training_log():
-    return load_json(TRAINING_LOG_FILE, [])
+    data = load_json(TRAINING_LOG_FILE, [])
+    return data if isinstance(data, list) else []
 
 
 def log_training_complete():
@@ -425,8 +636,12 @@ def log_training_complete():
     save_json(TRAINING_LOG_FILE, log)
 
 
-with open("drills.json", "r") as f:
-    drills = json.load(f)["drills"]
+try:
+    with open(os.path.join(APP_DIR, "drills.json"), "r") as f:
+        drills = json.load(f)["drills"]
+except (OSError, json.JSONDecodeError, KeyError) as e:
+    st.error(f"Couldn't load `drills.json` (expecting a top-level \"drills\" list): {e}")
+    st.stop()
 
 RADAR_ORDER = ["passing", "shooting", "dribbling", "fitness", "ball_control", "defending", "vision", "off_ball_movement"]
 RADAR_LABELS = {
@@ -435,18 +650,26 @@ RADAR_LABELS = {
     "off_ball_movement": "Off-Ball Movement",
 }
 
+
+def goto(target):
+    """Switch page and keep the bottom nav pills in sync with it."""
+    st.session_state.page = target
+    st.session_state._nav_override = target
+    st.rerun()
+
+
 def header():
     c1, c2 = st.columns([5, 1])
     with c1:
-        st.markdown('<div class="pitch-logo">⚽ PITCH <span>AI</span></div>', unsafe_allow_html=True)
+        st.markdown(logo_html(64), unsafe_allow_html=True)
     with c2:
         if st.button("👤", key="avatar_btn", help="Profile"):
             goto("Profile")
 
 
 def page_title(title, subtitle):
-    st.markdown(f'<div class="page-title">{title}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="page-sub">{subtitle}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="page-title">{_esc(title)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="page-sub">{_esc(subtitle)}</div>', unsafe_allow_html=True)
 
 
 def score_color(v, max_v=100):
@@ -460,7 +683,7 @@ def score_color(v, max_v=100):
 
 def chip(label, value, color="var(--cyan)", bar_pct=None):
     bar = f'<div class="bar-track"><div class="bar-fill" style="width:{bar_pct}%;background:{color}"></div></div>' if bar_pct is not None else ""
-    return f'<div class="chip"><div class="label">{label}</div><div class="value" style="color:{color}">{value}</div>{bar}</div>'
+    return f'<div class="chip"><div class="label">{_esc(label)}</div><div class="value" style="color:{color}">{_esc(value)}</div>{bar}</div>'
 
 
 def radar_chart(radar, title="Performance Overview", height=380):
@@ -504,15 +727,10 @@ def compare_line_chart(radar_a, radar_b, label_a, label_b):
     return fig
 
 
-def goto(target):
-    st.session_state.page = target
-    st.rerun()
-
-
 # ══════════════════════════════════════════════════════════════════════════
 # VIDEO — sample a few still frames so the coach can "see" the match
 # ══════════════════════════════════════════════════════════════════════════
-MAX_VIDEO_FRAMES = 3  # VISION_MODEL accepts at most 3 images per request
+MAX_VIDEO_FRAMES = 3  # keep well under the vision model's per-request image limit
 
 
 def extract_video_frames(video_path, num_frames=MAX_VIDEO_FRAMES, max_dim=768):
@@ -520,6 +738,8 @@ def extract_video_frames(video_path, num_frames=MAX_VIDEO_FRAMES, max_dim=768):
     This is a lightweight sample of stills, NOT frame-by-frame tracking — it can't count exact
     passes, tackles, or touches, but gives the coach a visual sense of the match."""
     frames = []
+    if cv2 is None:
+        return frames
     cap = cv2.VideoCapture(video_path)
     try:
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -571,7 +791,82 @@ ANALYSIS_SCHEMA = """Respond with ONLY valid JSON, no markdown fences, no commen
 good_pct + average_pct + poor_pct must sum to 100."""
 
 
+def parse_json_reply(raw):
+    """Pull the JSON object out of a model reply, tolerating <think> blocks, fences, and preamble."""
+    if not raw:
+        return None
+    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.S)
+    m = re.search(r"\{.*\}", raw, flags=re.S)
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _num(v, lo, hi, default, as_int=False):
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return default
+    x = max(lo, min(hi, x))
+    return int(round(x)) if as_int else round(x, 1)
+
+
+def _str_list(v, limit=8):
+    if isinstance(v, str):
+        v = [v]
+    if not isinstance(v, list):
+        return []
+    return [str(x) for x in v if x][:limit]
+
+
+def normalize_report(rep):
+    """Coerce an AI (or older saved) report into the exact shape the UI expects, so a malformed
+    reply can never crash a page."""
+    rep = rep if isinstance(rep, dict) else {}
+    raw_radar = rep.get("radar") if isinstance(rep.get("radar"), dict) else {}
+    radar = {k: _num(raw_radar.get(k), 0, 100, 0, as_int=True) for k in RADAR_ORDER}
+
+    weakest = rep.get("weakest_area")
+    strongest = rep.get("strongest_area")
+    if weakest not in RADAR_ORDER:
+        weakest = min(RADAR_ORDER, key=lambda k: radar[k])
+    if strongest not in RADAR_ORDER:
+        strongest = max(RADAR_ORDER, key=lambda k: radar[k])
+
+    da = rep.get("decision_analysis") if isinstance(rep.get("decision_analysis"), dict) else {}
+    good = _num(da.get("good_pct"), 0, 100, 0)
+    avg = _num(da.get("average_pct"), 0, 100, 0)
+    poor = _num(da.get("poor_pct"), 0, 100, 0)
+    total = good + avg + poor
+    if total <= 0:
+        good, avg, poor = 34, 33, 33
+    else:
+        good, avg, poor = (round(x * 100 / total, 1) for x in (good, avg, poor))
+
+    return {
+        "overall_rating": _num(rep.get("overall_rating"), 0, 10, 0.0),
+        "performance_score": _num(rep.get("performance_score"), 0, 100, 0, as_int=True),
+        "radar": radar,
+        "decision_analysis": {"good_pct": good, "average_pct": avg, "poor_pct": poor},
+        "findings": _str_list(rep.get("findings")),
+        "strengths": str(rep.get("strengths", "")),
+        "improvement": str(rep.get("improvement", "")),
+        "tactical_insight": str(rep.get("tactical_insight", "")),
+        "key_moment": str(rep.get("key_moment", "")),
+        "key_takeaway": str(rep.get("key_takeaway", "")),
+        "recommended_drills": _str_list(rep.get("recommended_drills")),
+        "weakest_area": weakest,
+        "strongest_area": strongest,
+        "message": str(rep.get("message", "")),
+    }
+
+
 def run_analysis(player_ctx, stats_ctx, drills_text, frames=None):
+    """Returns (normalized_report, None) on success, or (None, error_or_raw_text) on failure."""
     frame_note = ""
     if frames:
         frame_note = f"""
@@ -595,24 +890,28 @@ Base your radar scores, findings, strengths/weaknesses and ratings on the stats,
 frames provided — be specific and realistic, not generic.
 {ANALYSIS_SCHEMA}"""
 
+    attempts = []
     if frames:
         content = [{"type": "text", "text": prompt}]
         for uri in frames[:MAX_VIDEO_FRAMES]:
             content.append({"type": "image_url", "image_url": {"url": uri}})
-        messages = [{"role": "user", "content": content}]
-        model = VISION_MODEL
-    else:
-        messages = [{"role": "user", "content": prompt}]
-        model = MODEL
+        attempts.append((VISION_MODEL, [{"role": "user", "content": content}]))
+    # Text-only fallback (also the normal path when no video was attached).
+    attempts.append((MODEL, [{"role": "user", "content": prompt}]))
 
-    response = client.chat.completions.create(model=model, messages=messages)
-    raw = response.choices[0].message.content.strip().strip("`")
-    if raw.lower().startswith("json"):
-        raw = raw[4:]
-    try:
-        return json.loads(raw), None
-    except (json.JSONDecodeError, ValueError):
-        return None, raw
+    last_error = "Unknown error"
+    for model, messages in attempts:
+        try:
+            response = client.chat.completions.create(model=model, messages=messages)
+            raw = (response.choices[0].message.content or "").strip()
+        except Exception as e:
+            last_error = f"{model}: {e}"
+            continue
+        parsed = parse_json_reply(raw)
+        if parsed is not None:
+            return normalize_report(parsed), None
+        last_error = raw or "Empty response from the model."
+    return None, last_error
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -628,6 +927,13 @@ if "viewing_session" not in st.session_state:
 
 header()
 
+# If a button moved us to another page, update the pills BEFORE they are drawn
+# (a widget's state can't be changed after it has been created in the same run).
+if "_nav_override" in st.session_state:
+    _target = st.session_state.pop("_nav_override")
+    st.session_state.nav_pills = _target if _target in NAV_PAGES else None
+    st.session_state.last_pill = st.session_state.nav_pills
+
 with st.bottom:
     clicked = st.pills("Select Page:", NAV_PAGES, label_visibility="collapsed", key="nav_pills")
 if clicked != st.session_state.last_pill:
@@ -638,9 +944,6 @@ if clicked != st.session_state.last_pill:
 page = st.session_state.page
 sessions = load_sessions()
 profile = load_profile()
-
-def _esc(s):
-    return html.escape(str(s))
 
 
 @st.cache_data(show_spinner=False)
@@ -679,7 +982,7 @@ def render_empty_home():
     """Dashboard shown before the player has analyzed any match (placeholder '?' values)."""
     # ── hero: upload match clip ──
     hero_uri = asset_data_uri("hero_player.jpg")
-    art = f'<div class="hero-art" style="background-image:url({hero_uri})"></div>' if hero_uri else ""
+    art = f'<div class="hero-art" style="background-image:url(\'{hero_uri}\')"></div>' if hero_uri else ""
     with st.container(border=True):
         st.markdown(
             '<div class="hero-marker"></div>' + art
@@ -733,12 +1036,12 @@ def render_empty_home():
                 '<div class="find"><span class="dot a">!</span>Tactical insights from your clip</div>',
                 unsafe_allow_html=True,
             )
-            if st.button("Analyze a match →", key="empty_analyze", use_container_width=True):
+            if st.button("Analyze a match →", key="empty_analyze", **BTN_STRETCH):
                 goto("Analyze")
     with col_b:
         with st.container(border=True):
             st.markdown('<div class="sec-h">Performance Overview</div>', unsafe_allow_html=True)
-            st.plotly_chart(placeholder_radar(), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(placeholder_radar(), config={"displayModeBar": False}, **CHART_STRETCH)
             st.markdown(
                 '<div class="legend">'
                 '<span><i style="background:var(--red)"></i>?-? Needs Work</span>'
@@ -749,11 +1052,11 @@ def render_empty_home():
 
     # ── recommended training + improvement tracker ──
     preferred = ["First Touch Control", "Cone Dribbling Course", "Weak Foot Passing Wall"]
-    starter = [d for n in preferred for d in drills if d["name"] == n]
+    starter = [d for n in preferred for d in drills if d.get("name") == n]
     for d in drills:
         if len(starter) >= 3:
             break
-        if d["difficulty"] == "beginner" and d not in starter:
+        if d.get("difficulty") == "beginner" and d not in starter:
             starter.append(d)
     level = {"beginner": ("Easy", "badge-green"), "intermediate": ("Medium", "badge-amber")}
     icons = ["🎯", "⚽", "👟"]
@@ -763,17 +1066,17 @@ def render_empty_home():
         with st.container(border=True):
             rows = ""
             for ico, d in zip(icons, starter[:3]):
-                lvl, cls = level.get(d["difficulty"], ("Hard", "badge-red"))
+                lvl, cls = level.get(d.get("difficulty", "beginner"), ("Hard", "badge-red"))
                 rows += (
-                    f'<div class="tr-row"><div class="tr-ico">{ico}</div><div class="tr-name">{_esc(d["name"])}</div>'
-                    f'<div class="tr-min">{d["duration_minutes"]} min</div><span class="badge {cls}">{lvl}</span></div>'
+                    f'<div class="tr-row"><div class="tr-ico">{ico}</div><div class="tr-name">{_esc(d.get("name", "Drill"))}</div>'
+                    f'<div class="tr-min">{_esc(d.get("duration_minutes", "?"))} min</div><span class="badge {cls}">{lvl}</span></div>'
                 )
             st.markdown(
                 '<div class="sec-h">Recommended Training</div>'
                 '<div class="sec-sub">Starter drills — personalized after your first match</div>' + rows,
                 unsafe_allow_html=True,
             )
-            if st.button("Start Training →", key="empty_training", use_container_width=True):
+            if st.button("Start Training →", key="empty_training", **BTN_STRETCH):
                 goto("Training")
     with col_d:
         with st.container(border=True):
@@ -788,7 +1091,7 @@ def render_empty_home():
                 '<div class="imp-head"><span>ATTRIBUTE</span><span>BEFORE</span><span></span><span>AFTER</span><span>CHANGE</span></div>' + rows,
                 unsafe_allow_html=True,
             )
-            if st.button("View all progress →", key="empty_progress", use_container_width=True):
+            if st.button("View all progress →", key="empty_progress", **BTN_STRETCH):
                 goto("Progress")
 
 
@@ -805,11 +1108,11 @@ if page == "Home":
         with st.container(border=True):
             st.markdown("**🎥 Upload Match Clip**")
             st.caption("Analyze your game and get a full coaching breakdown.")
-            if st.button("Upload Video ⬆️"):
+            if st.button("Upload Video ⬆️", key="home_upload"):
                 goto("Analyze")
 
         latest = sessions[-1]
-        report = latest["ai_report"]
+        report = normalize_report(latest.get("ai_report"))
         radar = report["radar"]
         weakest_k, strongest_k = report["weakest_area"], report["strongest_area"]
 
@@ -824,9 +1127,9 @@ if page == "Home":
         )
 
         with st.container(border=True):
-            st.markdown(f"**📹 Latest Analysis** — {latest.get('opponent', 'Match')} · {latest['date']}")
+            st.markdown(f"**📹 Latest Analysis** — {latest.get('opponent') or 'Match'} · {latest.get('date', '')}")
             st.markdown(f"<span class='badge badge-cyan'>{report['performance_score']}/100 PERFORMANCE</span>", unsafe_allow_html=True)
-            for finding in report.get("findings", []):
+            for finding in report["findings"]:
                 st.write(f"• {finding}")
             if st.button("View Full Analysis →", key="home_view_full"):
                 st.session_state.viewing_session = len(sessions) - 1
@@ -834,17 +1137,17 @@ if page == "Home":
 
         with st.container(border=True):
             st.markdown("**📊 Performance Overview**")
-            st.plotly_chart(radar_chart(radar), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(radar_chart(radar), config={"displayModeBar": False}, **CHART_STRETCH)
 
         with st.container(border=True):
             st.markdown("**📋 Recommended Training**")
-            for d in report.get("recommended_drills", []):
+            for d in report["recommended_drills"]:
                 st.write(f"• {d}")
-            if st.button("Start Training →"):
+            if st.button("Start Training →", key="home_training"):
                 goto("Training")
 
         if len(sessions) >= 2:
-            first_radar = sessions[0]["ai_report"]["radar"]
+            first_radar = normalize_report(sessions[0].get("ai_report"))["radar"]
             with st.container(border=True):
                 st.markdown("**📈 Improvement Tracker**")
                 rows = ""
@@ -858,6 +1161,7 @@ if page == "Home":
                         f'<span style="color:{c}">({"+" if change>=0 else ""}{change})</span></span></div>'
                     )
                 st.markdown(rows, unsafe_allow_html=True)
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # ANALYZE
@@ -885,10 +1189,7 @@ elif page == "Analyze":
             opponent = st.text_input("Opponent", placeholder="e.g. Galaxy FC")
             goals = st.number_input("Goals scored", min_value=0, max_value=10, value=0)
         with c2:
-            position = st.selectbox(
-                "Your position", ["Goalkeeper", "Defender", "Midfielder", "Winger", "Striker"],
-                index=["Goalkeeper", "Defender", "Midfielder", "Winger", "Striker"].index(profile.get("position", "Midfielder")),
-            )
+            position = st.selectbox("Your position", POSITIONS, index=_position_index(profile.get("position")))
             match_date = st.date_input("Match date", value=date.today())
             assists = st.number_input("Assists", min_value=0, max_value=10, value=0)
 
@@ -928,10 +1229,10 @@ elif page == "Analyze":
             if not video_sessions:
                 st.caption("No videos uploaded yet.")
             for s in reversed(video_sessions[-5:]):
-                r = s["ai_report"]
+                r = normalize_report(s.get("ai_report"))
                 color = score_color(r["performance_score"])
                 st.markdown(
-                    f"<div class='stat-row'><span>{s.get('opponent','Match')} · {s['date']}</span>"
+                    f"<div class='stat-row'><span>{_esc(s.get('opponent') or 'Match')} · {_esc(s.get('date', ''))}</span>"
                     f"<span style='color:{color}'>{r['performance_score']}/100</span></div>",
                     unsafe_allow_html=True,
                 )
@@ -948,11 +1249,14 @@ elif page == "Analyze":
     if analyse_clicked:
         if not weakness and video_file is None:
             st.warning("Tell your coach what your biggest weakness was, or upload a match video!")
+        elif dribbles_successful > dribbles_attempted:
+            st.warning("Successful dribbles can't be higher than dribbles attempted.")
         else:
             video_filename = None
             frames = []
             if video_file is not None:
-                video_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{video_file.name}"
+                safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", os.path.basename(video_file.name))
+                video_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_name}"
                 video_path = os.path.join(UPLOAD_DIR, video_filename)
                 with open(video_path, "wb") as f:
                     f.write(video_file.getbuffer())
@@ -966,7 +1270,7 @@ elif page == "Analyze":
                 weakness_key = weakness or "unspecified — infer from the match video"
                 matching_drills = []
                 for d in drills:
-                    for tag in d["tags"]:
+                    for tag in d.get("tags", []):
                         if any(w in weakness_key.lower() for w in tag.split("_")):
                             matching_drills.append(f"{d['name']} — {d['description']}")
                             break
@@ -986,8 +1290,9 @@ elif page == "Analyze":
                 report, raw_fallback = run_analysis(player_ctx, stats_ctx, drills_text, frames=frames)
 
             if report is None:
-                st.error("Couldn't parse the coach's report — showing raw output instead.")
-                st.write(raw_fallback)
+                st.error("Your coach couldn't produce a readable report this time. Please try again.")
+                with st.expander("Details"):
+                    st.write(raw_fallback)
             else:
                 dribble_pct = round(100 * dribbles_successful / dribbles_attempted) if dribbles_attempted else None
 
@@ -1021,17 +1326,18 @@ elif page == "Analyze":
 elif page == "Drills":
     page_title("🏃 Drill Library", "Build your training toolkit, one drill at a time.")
 
-    all_tags = sorted({t for d in drills for t in d["tags"]})
+    all_tags = sorted({t for d in drills for t in d.get("tags", [])})
     selected_tag = st.selectbox("Filter by skill", ["All"] + all_tags)
 
     completed = set(profile.get("completed_drills", []))
-    diff_badge = {"Easy": "badge-green", "Medium": "badge-amber", "Hard": "badge-red"}
+    diff_badge = {"easy": "badge-green", "beginner": "badge-green", "medium": "badge-amber",
+                  "intermediate": "badge-amber", "hard": "badge-red", "advanced": "badge-red"}
 
     for d in drills:
-        if selected_tag != "All" and selected_tag not in d["tags"]:
+        if selected_tag != "All" and selected_tag not in d.get("tags", []):
             continue
         with st.container(border=True):
-            b = diff_badge.get(d["difficulty"], "badge-cyan")
+            b = diff_badge.get(str(d.get("difficulty", "")).lower(), "badge-cyan")
             done = d["name"] in completed
             st.markdown(
                 f"**{'✅ ' if done else ''}{d['name']}** &nbsp; "
@@ -1072,7 +1378,7 @@ elif page == "Training":
     else:
         last = sessions[-1]
         with st.container(border=True):
-            st.markdown(f"<span class='badge badge-amber'>Last weakness</span> {last['weakness'] or 'Not specified — analyzed from video'}", unsafe_allow_html=True)
+            st.markdown(f"<span class='badge badge-amber'>Last weakness</span> {_esc(last.get('weakness') or 'Not specified — analyzed from video')}", unsafe_allow_html=True)
             focus = st.selectbox("What do you want to focus on today?",
                                   ["My biggest weakness", "Passing", "Dribbling", "Finishing", "Defending", "Fitness"])
             duration = st.selectbox("Session duration", ["30 minutes", "45 minutes", "60 minutes", "90 minutes"])
@@ -1082,7 +1388,7 @@ elif page == "Training":
             with st.spinner("Building your session plan..."):
                 drills_list = "\n".join(f"{d['name']} ({d['duration_minutes']} mins) — {d['description']}" for d in drills)
                 prompt = f"""You are an elite football coach building a training session plan.
-Player's last match weakness: {last['weakness']}
+Player's last match weakness: {last.get('weakness') or 'not specified'}
 Today's focus: {focus}
 Session duration: {duration}
 
@@ -1096,8 +1402,11 @@ Build a complete training session plan with:
 4. One key coaching point
 
 Format clearly using markdown headers."""
-                response = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
-            st.session_state.current_plan = response.choices[0].message.content
+                try:
+                    response = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
+                    st.session_state.current_plan = response.choices[0].message.content
+                except Exception as e:
+                    st.error(f"Couldn't build the plan right now: {e}")
 
         if st.session_state.get("current_plan"):
             with st.container(border=True):
@@ -1117,7 +1426,7 @@ elif page == "Progress":
         st.info("Analyze at least one match to start tracking progress.")
     else:
         training_log = load_training_log()
-        ratings = [s["ai_report"]["overall_rating"] for s in sessions]
+        ratings = [normalize_report(s.get("ai_report"))["overall_rating"] for s in sessions]
         st.markdown(
             '<div class="chip-grid">'
             + chip("Matches Analyzed", len(sessions), "var(--cyan)")
@@ -1131,14 +1440,15 @@ elif page == "Progress":
         if len(sessions) >= 2:
             with st.container(border=True):
                 st.markdown("**📊 Week's Progress**")
-                labels = [f"{s.get('opponent','Match')} · {s['date']}" for s in sessions]
+                labels = [f"{s.get('opponent') or 'Match'} · {s.get('date', '')}" for s in sessions]
                 idx_a, idx_b = st.select_slider(
                     "Compare two matches", options=list(range(len(sessions))),
                     value=(0, len(sessions) - 1), format_func=lambda i: labels[i],
                 )
-                fig = compare_line_chart(sessions[idx_a]["ai_report"]["radar"], sessions[idx_b]["ai_report"]["radar"],
+                fig = compare_line_chart(normalize_report(sessions[idx_a].get("ai_report"))["radar"],
+                                          normalize_report(sessions[idx_b].get("ai_report"))["radar"],
                                           labels[idx_a], labels[idx_b])
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig, config={"displayModeBar": False}, **CHART_STRETCH)
         else:
             st.caption("Analyze a second match to unlock the comparison chart.")
 
@@ -1163,17 +1473,22 @@ elif page == "Diet":
         with c2:
             weight_kg = st.number_input("Weight (kg)", 30, 150, 70)
             playstyle = st.selectbox("Play-style", list(PLAYSTYLE_MULTIPLIER.keys()))
-            goal = st.selectbox("Goal", ["Maintain", "Build muscle", "Cut weight"])
+            goal_options = ["Maintain", "Build muscle"] + (["Cut weight"] if age >= 18 else [])
+            goal = st.selectbox("Goal", goal_options)
+            if age < 18:
+                st.caption("Weight-cut targets aren't offered under 18. Growing athletes should check with a doctor or dietitian.")
         restrictions = st.text_input("Dietary restrictions (optional)", placeholder="e.g. No dairy, no shellfish")
         calc = st.button("Calculate My Diet Plan 🧮")
 
     if calc:
+        st.session_state.pop("diet_plan", None)
         bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age + (5 if sex == "Male" else -161)
         tdee = bmr * PLAYSTYLE_MULTIPLIER[playstyle]
         if goal == "Build muscle":
             tdee += 300
         elif goal == "Cut weight":
             tdee -= 300
+        tdee = max(tdee, 1500 if sex == "Male" else 1200)  # never recommend a crash-diet calorie level
 
         protein_g = round(weight_kg * 2.0)
         fat_g = round((tdee * 0.27) / 9)
@@ -1209,8 +1524,13 @@ Daily targets: {dr['calories']} kcal, {dr['protein']}g protein, {dr['carbs']}g c
 Dietary restrictions: {dr['restrictions'] or 'none'}.
 Suggest a simple one-day meal plan (breakfast, lunch, dinner, 1 snack) that roughly hits these targets. Keep it practical and concise, using markdown."""
                 with st.spinner("Building your meal plan..."):
-                    response = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
-                st.markdown(response.choices[0].message.content)
+                    try:
+                        response = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
+                        st.session_state.diet_plan = response.choices[0].message.content
+                    except Exception as e:
+                        st.error(f"Couldn't build the meal plan right now: {e}")
+            if st.session_state.get("diet_plan"):
+                st.markdown(st.session_state.diet_plan)
 
 # ══════════════════════════════════════════════════════════════════════════
 # PROFILE
@@ -1222,17 +1542,20 @@ elif page == "Profile":
         c1, c2 = st.columns(2)
         name = c1.text_input("Name", value=profile.get("name", ""))
         jersey_number = c2.text_input("Jersey number", value=str(profile.get("jersey_number", "")))
-        position = st.selectbox(
-            "Position", ["Goalkeeper", "Defender", "Midfielder", "Winger", "Striker"],
-            index=["Goalkeeper", "Defender", "Midfielder", "Winger", "Striker"].index(profile.get("position", "Midfielder")),
-        )
+        position = st.selectbox("Position", POSITIONS, index=_position_index(profile.get("position")))
         if st.button("Save Profile"):
             profile.update({"name": name, "jersey_number": jersey_number, "position": position})
             save_profile(profile)
             st.success("Saved!")
 
+    with st.container(border=True):
+        try:
+            authenticator.logout("Log out", "main", key="logout_btn")
+        except TypeError:  # older streamlit-authenticator versions have no `key` argument
+            authenticator.logout("Log out", "main")
+
     training_log = load_training_log()
-    ratings = [s["ai_report"]["overall_rating"] for s in sessions]
+    ratings = [normalize_report(s.get("ai_report"))["overall_rating"] for s in sessions]
     goals_total = sum(s.get("goals", 0) for s in sessions)
     assists_total = sum(s.get("assists", 0) for s in sessions)
 
@@ -1254,7 +1577,8 @@ elif page == "Profile":
     )
 
     if sessions:
-        avg_radar = {k: round(sum(s["ai_report"]["radar"].get(k, 0) for s in sessions) / len(sessions)) for k in RADAR_ORDER}
+        all_radars = [normalize_report(s.get("ai_report"))["radar"] for s in sessions]
+        avg_radar = {k: round(sum(r.get(k, 0) for r in all_radars) / len(all_radars)) for k in RADAR_ORDER}
         buckets = {
             "Attacking": ["shooting", "off_ball_movement"],
             "Defending": ["defending"],
@@ -1282,11 +1606,11 @@ elif page == "History":
             st.info("No sessions saved yet. Analyze a match first!")
         else:
             for i, s in reversed(list(enumerate(sessions))):
-                r = s["ai_report"]
+                r = normalize_report(s.get("ai_report"))
                 with st.container(border=True):
                     st.markdown(
-                        f"**{s.get('opponent','Match')}** &nbsp; "
-                        f"<span class='badge badge-cyan'>{s['date']}</span> &nbsp; "
+                        f"**{_esc(s.get('opponent') or 'Match')}** &nbsp; "
+                        f"<span class='badge badge-cyan'>{_esc(s.get('date', ''))}</span> &nbsp; "
                         f"<span class='badge {'badge-green' if r['performance_score']>=70 else 'badge-amber' if r['performance_score']>=40 else 'badge-red'}'>{r['performance_score']}/100</span>",
                         unsafe_allow_html=True,
                     )
@@ -1295,13 +1619,16 @@ elif page == "History":
                         st.rerun()
     else:
         i = st.session_state.viewing_session
+        if not isinstance(i, int) or not (0 <= i < len(sessions)):
+            st.session_state.viewing_session = None
+            st.rerun()
         s = sessions[i]
-        r = s["ai_report"]
+        r = normalize_report(s.get("ai_report"))
         if st.button("← Back to Match History"):
             st.session_state.viewing_session = None
             st.rerun()
 
-        page_title(f"{s.get('opponent','Match')}", f"{s['date']} · {s['position']}")
+        page_title(s.get("opponent") or "Match", f"{s.get('date', '')} · {s.get('position', '')}")
         if s.get("analyzed_from_video"):
             st.markdown("<span class='badge badge-cyan'>📹 Analyzed from video</span>", unsafe_allow_html=True)
 
@@ -1318,7 +1645,7 @@ elif page == "History":
                 st.write(f"**Improvement:** {r['improvement']}")
                 st.write(f"**Tactical Insight:** {r['tactical_insight']}")
                 st.write(f"**Key Moment:** {r['key_moment']}")
-                st.markdown(f"<div class='quote-box'>⭐ {r['key_takeaway']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='quote-box'>⭐ {_esc(r['key_takeaway'])}</div>", unsafe_allow_html=True)
         with col2:
             with st.container(border=True):
                 st.markdown("**📈 Match Stats**")
@@ -1332,7 +1659,7 @@ elif page == "History":
                     ("Sprints", s.get("sprints")), ("Yellow Cards", s.get("yellow_cards")),
                     ("Red Cards", s.get("red_cards")),
                 ]
-                rows = "".join(f"<div class='stat-row'><span>{k}</span><span>{v}</span></div>" for k, v in stat_pairs)
+                rows = "".join(f"<div class='stat-row'><span>{k}</span><span>{'—' if v is None else v}</span></div>" for k, v in stat_pairs)
                 st.markdown(rows, unsafe_allow_html=True)
 
         with st.container(border=True):
@@ -1345,7 +1672,7 @@ elif page == "History":
 
         with st.container(border=True):
             st.markdown("**📊 Detailed Breakdown**")
-            st.plotly_chart(radar_chart(r["radar"]), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(radar_chart(r["radar"]), config={"displayModeBar": False}, **CHART_STRETCH)
 
             da = r["decision_analysis"]
             st.markdown("**⚖️ Decision Analysis**")
@@ -1362,7 +1689,7 @@ elif page == "History":
             st.markdown("**📋 Recommended Drills**")
             for d in r.get("recommended_drills", []):
                 st.write(f"• {d}")
-            st.markdown(f"<div class='quote-box'>🗣️ {r['message']}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='quote-box'>🗣️ {_esc(r['message'])}</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════
 # CHAT
@@ -1383,11 +1710,19 @@ elif page == "Chat":
         st.chat_message("user", avatar="🧑").write(user_input)
 
         messages = [{"role": "system", "content": "You are an elite UEFA Pro License football coach. Answer all questions with specific, practical football advice. Be direct, motivating and knowledgeable."}]
-        messages.extend(st.session_state.chat_history)
+        messages.extend(st.session_state.chat_history[-20:])  # keep requests a sane size
 
         with st.spinner("Coach is thinking..."):
-            response = client.chat.completions.create(model=MODEL, messages=messages)
-            coach_reply = response.choices[0].message.content
+            try:
+                response = client.chat.completions.create(model=MODEL, messages=messages)
+                coach_reply = response.choices[0].message.content or ""
+            except Exception as e:
+                coach_reply = None
+                st.error(f"Your coach couldn't reply right now: {e}")
 
-        st.session_state.chat_history.append({"role": "assistant", "content": coach_reply})
+        if coach_reply:
+            st.session_state.chat_history.append({"role": "assistant", "content": coach_reply})
+            st.chat_message("assistant", avatar="⚽").write(coach_reply)
+        else:
+            st.session_state.chat_history.pop()  # drop the unanswered question so history stays alternating
         st.chat_message("assistant", avatar="⚽").write(coach_reply)
