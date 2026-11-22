@@ -359,7 +359,7 @@ WELCOME_CSS = """
 <style>
 .stApp{ background:linear-gradient(180deg,#000d1a 0%,#021724 100%) fixed !important; }
 .block-container{ padding-top:1rem !important; }
-.welcome-hero img{ width:100%; display:block;
+.welcome-hero img{ width:100%; display:block; max-height:58vh; object-fit:cover; object-position:center 35%;
   -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 5%,#000 92%,transparent 100%);
   mask-image:linear-gradient(to bottom,transparent 0,#000 5%,#000 92%,transparent 100%); }
 .st-key-welcome_start button, .st-key-welcome_login button{
@@ -373,6 +373,20 @@ WELCOME_CSS = """
 """
 
 
+# Puts the two buttons ON the bottom of the photo (a dark fade keeps them readable).
+OVERLAY_CSS = """
+<style>
+.block-container{ padding-bottom:1rem !important; }
+.welcome-hero{ position:relative; }
+.welcome-hero img{ max-height:82vh; }
+.welcome-hero::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:11rem; pointer-events:none;
+  background:linear-gradient(to top, rgba(0,13,26,.92) 0%, rgba(0,13,26,.55) 55%, transparent 100%); }
+.st-key-welcome_start, .st-key-welcome_login{ position:relative; z-index:5; align-self:center; width:86% !important; }
+.st-key-welcome_start{ margin-top:-9.8rem !important; }
+</style>
+"""
+
+
 def render_welcome():
     """First screen: GET STARTED -> sign-up screen, LOG IN -> log-in screen."""
     st.markdown(WELCOME_CSS, unsafe_allow_html=True)
@@ -382,6 +396,7 @@ def render_welcome():
         if hero:
             uri = _plain_data_uri(hero, os.path.getmtime(hero))
             st.markdown(f'<div class="welcome-hero"><img src="{uri}" alt="Pitch AI Coach"></div>', unsafe_allow_html=True)
+            st.markdown(OVERLAY_CSS, unsafe_allow_html=True)
         else:
             st.markdown(
                 logo_html(120, center=True)
@@ -654,6 +669,7 @@ RADAR_LABELS = {
 def goto(target):
     """Switch page and keep the bottom nav pills in sync with it."""
     st.session_state.page = target
+    st.session_state.sub = None
     st.session_state._nav_override = target
     st.rerun()
 
@@ -661,7 +677,7 @@ def goto(target):
 def header():
     c1, c2 = st.columns([5, 1])
     with c1:
-        st.markdown(logo_html(64), unsafe_allow_html=True)
+        st.markdown(logo_html(56), unsafe_allow_html=True)
     with c2:
         if st.button("👤", key="avatar_btn", help="Profile"):
             goto("Profile")
@@ -924,6 +940,8 @@ if "last_pill" not in st.session_state:
     st.session_state.last_pill = None
 if "viewing_session" not in st.session_state:
     st.session_state.viewing_session = None
+if "sub" not in st.session_state:
+    st.session_state.sub = None  # which sub-page of the current page is open (None = the page's menu)
 
 header()
 
@@ -940,6 +958,7 @@ if clicked != st.session_state.last_pill:
     st.session_state.last_pill = clicked
     if clicked:
         st.session_state.page = clicked
+        st.session_state.sub = None
 
 page = st.session_state.page
 sessions = load_sessions()
@@ -978,416 +997,466 @@ def placeholder_radar(height=300):
     return fig
 
 
-def render_empty_home():
-    """Dashboard shown before the player has analyzed any match (placeholder '?' values)."""
-    # ── hero: upload match clip ──
-    hero_uri = asset_data_uri("hero_player.jpg")
-    art = f'<div class="hero-art" style="background-image:url(\'{hero_uri}\')"></div>' if hero_uri else ""
-    with st.container(border=True):
-        st.markdown(
-            '<div class="hero-marker"></div>' + art
-            + '<div class="hero-checks"><div><span>✔</span>AI ANALYSIS</div>'
-            '<div><span>✔</span>PERSONALIZED FEEDBACK</div><div><span>✔</span>TRAINING RECOMMENDATIONS</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            '<div class="hero-icon">🎥</div><div class="hero-title">UPLOAD<br>MATCH CLIP</div>'
-            '<div class="hero-sub">Analyze your game in under 60 seconds.</div>',
-            unsafe_allow_html=True,
-        )
-        if st.button("Upload Video ⬆️", key="hero_upload"):
-            goto("Analyze")
+# ══════════════════════════════════════════════════════════════════════════
+# BUTTON-MENU NAVIGATION
+# Every page is a short menu of buttons; each button opens a sub-page with one
+# small piece of content, so nothing needs scrolling.
+# ══════════════════════════════════════════════════════════════════════════
+ss = st.session_state
 
-    # ── four summary cards ──
-    st.markdown(
-        '<div class="stat-grid">'
-        '<div class="sc"><div class="sc-h"><span>Overall Rating</span><i>↗</i></div>'
-        '<div class="sc-big">?<small>/10</small></div>'
-        '<div class="gauge"><b></b></div><div class="gauge-scale"><span>?</span><span>?</span><span>?</span></div></div>'
-        '<div class="sc"><div class="sc-h"><span>Weakest Area</span><i>◎</i></div>'
-        '<div class="sc-name" style="color:var(--amber)">Unknown</div>'
-        '<div class="sc-big" style="font-size:1.2rem">?<small>/10</small></div>'
-        '<div class="gauge"><b></b></div></div>'
-        '<div class="sc"><div class="sc-h"><span>Strongest Area</span><i>★</i></div>'
-        '<div class="sc-name" style="color:var(--green)">Unknown</div>'
-        '<div class="sc-big" style="font-size:1.2rem">?<small>/10</small></div>'
-        '<div class="gauge"><b></b></div></div>'
-        '<div class="sc"><div class="sc-h"><span>Focus This Week</span><i>△</i></div>'
-        '<div class="sc-name" style="color:var(--cyan)">To be set</div>'
-        '<div class="sc-note">Upload a clip to get your focus area.</div>'
-        '<div class="ring">?%</div></div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+MENU_CSS = """
+<style>
+.block-container{ padding-top:.8rem !important; padding-bottom:6rem !important; }
+.page-sub{ margin-bottom:.7rem !important; }
+div[class*="st-key-hub_"] button{
+  width:100%; min-height:3.2rem; justify-content:flex-start !important; text-align:left;
+  border-radius:14px !important; background:linear-gradient(135deg,#111b30,#0d1524) !important;
+  color:#f2f5fa !important; border:1px solid var(--card-border) !important; font-weight:700 !important; }
+div[class*="st-key-hub_"] button:hover{ border-color:#22d3ee !important; }
+div[class*="st-key-hub_"] button p{ text-align:left; width:100%; }
+.st-key-sub_back button{ background:transparent !important; color:#8b98ad !important;
+  border:1px solid rgba(34,211,238,.25) !important; min-height:2.1rem; padding:.1rem .9rem; }
+.st-key-primary_cta button{ width:100%; min-height:3.2rem; border-radius:999px !important; border:none !important;
+  background:#00e5ff !important; color:#03121c !important; font-weight:800 !important; letter-spacing:.04em; }
+.st-key-primary_cta button p{ color:#03121c !important; font-weight:800; }
+/* keep the header row and the Prev/Next rows on ONE line, even on a phone */
+div[data-testid="stHorizontalBlock"]:has(.st-key-avatar_btn),
+div[data-testid="stHorizontalBlock"]:has([class*="st-key-pgbtn_"]){ flex-wrap:nowrap !important; }
+div[data-testid="stHorizontalBlock"]:has(.st-key-avatar_btn) > div,
+div[data-testid="stHorizontalBlock"]:has([class*="st-key-pgbtn_"]) > div{ min-width:0 !important; }
+</style>
+"""
+st.markdown(MENU_CSS, unsafe_allow_html=True)
 
-    # ── latest analysis + performance overview ──
-    col_a, col_b = st.columns(2)
-    with col_a:
-        with st.container(border=True):
-            st.markdown(
-                '<div class="sec-h">Latest Analysis</div>'
-                '<div class="thumb"><div class="play">▶</div><span class="dur">??:??</span></div>'
-                '<div class="match-row"><div><div class="match-name">Match vs ???</div><div class="muted">Date ?? · Full Match</div></div>'
-                '<div class="perf-box"><b>??</b><span class="muted">/100</span><small>PERFORMANCE</small></div></div>'
-                '<div class="find-h">AI FINDINGS</div>'
-                '<div class="find"><span class="dot g">✓</span>Your strengths will show up here</div>'
-                '<div class="find"><span class="dot a">!</span>Lost possession ? times</div>'
-                '<div class="find"><span class="dot r">!</span>Your biggest weakness, spotted by AI</div>'
-                '<div class="find"><span class="dot a">!</span>Tactical insights from your clip</div>',
-                unsafe_allow_html=True,
-            )
-            if st.button("Analyze a match →", key="empty_analyze", **BTN_STRETCH):
-                goto("Analyze")
-    with col_b:
-        with st.container(border=True):
-            st.markdown('<div class="sec-h">Performance Overview</div>', unsafe_allow_html=True)
-            st.plotly_chart(placeholder_radar(), config={"displayModeBar": False}, **CHART_STRETCH)
-            st.markdown(
-                '<div class="legend">'
-                '<span><i style="background:var(--red)"></i>?-? Needs Work</span>'
-                '<span><i style="background:var(--amber)"></i>?-? Average</span>'
-                '<span><i style="background:var(--green)"></i>?-? Strong</span></div>',
-                unsafe_allow_html=True,
-            )
+# New account in this browser session -> forget the previous user's half-filled forms and chat.
+if ss.get("_last_user") != CURRENT_USER:
+    for _k in list(ss.keys()):
+        if _k.startswith(("an_", "df_", "pg_")) or _k in (
+            "chat_history", "current_plan", "diet_result", "diet_plan", "viewing_session", "drill_filter",
+        ):
+            del ss[_k]
+    ss._last_user = CURRENT_USER
+    ss.sub = None
 
-    # ── recommended training + improvement tracker ──
-    preferred = ["First Touch Control", "Cone Dribbling Course", "Weak Foot Passing Wall"]
-    starter = [d for n in preferred for d in drills if d.get("name") == n]
-    for d in drills:
-        if len(starter) >= 3:
-            break
-        if d.get("difficulty") == "beginner" and d not in starter:
-            starter.append(d)
-    level = {"beginner": ("Easy", "badge-green"), "intermediate": ("Medium", "badge-amber")}
-    icons = ["🎯", "⚽", "👟"]
+# Streamlit forgets a widget's value when its page isn't drawn. These forms span several
+# sub-pages, so re-assign their values on every run to keep them.
+ANALYZE_NUM_DEFAULTS = {
+    "an_goals": 0, "an_assists": 0, "an_shots": 0, "an_keypasses": 0,
+    "an_drib_att": 0, "an_drib_succ": 0, "an_tackles": 0, "an_duels": 0, "an_possession": 0,
+    "an_fouls_won": 0, "an_fouls_comm": 0, "an_distance": 0.0, "an_sprints": 0,
+    "an_offsides": 0, "an_yellow": 0, "an_red": 0,
+}
+ANALYZE_KEYS = ["an_jersey", "an_jersey_color", "an_name", "an_opponent", "an_position",
+                "an_date", "an_weakness", "an_notes"] + list(ANALYZE_NUM_DEFAULTS)
+DIET_KEYS = ["df_sex", "df_age", "df_height", "df_weight", "df_style", "df_goal", "df_restr"]
+for _k in ANALYZE_KEYS + DIET_KEYS + ["drill_filter"]:
+    if _k in ss:
+        ss[_k] = ss[_k]
 
-    col_c, col_d = st.columns(2)
-    with col_c:
-        with st.container(border=True):
-            rows = ""
-            for ico, d in zip(icons, starter[:3]):
-                lvl, cls = level.get(d.get("difficulty", "beginner"), ("Hard", "badge-red"))
-                rows += (
-                    f'<div class="tr-row"><div class="tr-ico">{ico}</div><div class="tr-name">{_esc(d.get("name", "Drill"))}</div>'
-                    f'<div class="tr-min">{_esc(d.get("duration_minutes", "?"))} min</div><span class="badge {cls}">{lvl}</span></div>'
-                )
-            st.markdown(
-                '<div class="sec-h">Recommended Training</div>'
-                '<div class="sec-sub">Starter drills — personalized after your first match</div>' + rows,
-                unsafe_allow_html=True,
-            )
-            if st.button("Start Training →", key="empty_training", **BTN_STRETCH):
-                goto("Training")
-    with col_d:
-        with st.container(border=True):
-            rows = ""
-            for k in ["passing", "vision", "shooting", "ball_control", "defending", "fitness"]:
-                rows += (
-                    f'<div class="imp-row"><span>{RADAR_LABELS[k]}</span><span>?%</span><div class="imp-bar"></div>'
-                    f'<span>?%</span><span style="color:var(--green)">↑ ?%</span></div>'
-                )
-            st.markdown(
-                '<div class="sec-h">Improvement Tracker</div>'
-                '<div class="imp-head"><span>ATTRIBUTE</span><span>BEFORE</span><span></span><span>AFTER</span><span>CHANGE</span></div>' + rows,
-                unsafe_allow_html=True,
-            )
-            if st.button("View all progress →", key="empty_progress", **BTN_STRETCH):
-                goto("Progress")
+
+def init_analyze_state():
+    ss.setdefault("an_jersey", str(profile.get("jersey_number", "")))
+    ss.setdefault("an_jersey_color", "#e11d48")
+    ss.setdefault("an_name", profile.get("name", ""))
+    ss.setdefault("an_opponent", "")
+    ss.setdefault("an_position", POSITIONS[_position_index(profile.get("position"))])
+    ss.setdefault("an_date", date.today())
+    ss.setdefault("an_weakness", "")
+    ss.setdefault("an_notes", "")
+    for k, v in ANALYZE_NUM_DEFAULTS.items():
+        ss.setdefault(k, v)
+
+
+def reset_analyze_state():
+    for k in ANALYZE_KEYS + ["an_video"]:
+        ss.pop(k, None)
+    ss.an_up_n = ss.get("an_up_n", 0) + 1  # gives the video uploader a fresh, empty state
+
+
+def open_sub(name):
+    ss.sub = name
+
+
+def close_sub():
+    ss.sub = None
+
+
+def _open_match(i):
+    ss.viewing_session = i
+    ss.sub = None
+
+
+def _close_match():
+    ss.viewing_session = None
+    ss.sub = None
+
+
+def hub_btn(key, label, sub=None):
+    """A menu button that opens a sub-page."""
+    st.button(label, key=f"hub_{key}", on_click=open_sub, args=(sub or key,))
+
+
+def hub_go(key, label, target):
+    """A menu button that jumps to another main page."""
+    if st.button(label, key=f"hub_{key}"):
+        goto(target)
+
+
+def sub_header(title, subtitle="", back=close_sub):
+    st.button("← Back", key="sub_back", on_click=back)
+    page_title(title, subtitle)
+
+
+def _pg_step(key, delta):
+    ss[f"pg_{key}"] = max(0, ss.get(f"pg_{key}", 0) + delta)
+
+
+def paginate(items, per_page, key):
+    key = re.sub(r"\W", "_", key)
+    pages = max(1, -(-len(items) // per_page))
+    cur = min(ss.get(f"pg_{key}", 0), pages - 1)
+    ss[f"pg_{key}"] = cur
+    return items[cur * per_page:(cur + 1) * per_page], cur, pages
+
+
+def pager(key, cur, pages):
+    if pages <= 1:
+        return
+    key = re.sub(r"\W", "_", key)
+    c1, c2, c3 = st.columns(3)
+    c1.button("◀ Prev", key=f"pgbtn_prev_{key}", on_click=_pg_step, args=(key, -1), disabled=cur == 0)
+    c2.markdown(f"<div style='text-align:center;padding-top:.55rem;color:var(--muted)'>{cur + 1} / {pages}</div>",
+                unsafe_allow_html=True)
+    c3.button("Next ▶", key=f"pgbtn_next_{key}", on_click=_pg_step, args=(key, 1), disabled=cur >= pages - 1)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # HOME
 # ══════════════════════════════════════════════════════════════════════════
 if page == "Home":
+    sub = ss.sub
     display_name = profile.get("name") or CURRENT_USER
-    page_title(f"Welcome back, {display_name}", "Every clip makes you better.")
-
-    if not sessions:
-        render_empty_home()
-    else:
-        with st.container(border=True):
-            st.markdown("**🎥 Upload Match Clip**")
-            st.caption("Analyze your game and get a full coaching breakdown.")
-            if st.button("Upload Video ⬆️", key="home_upload"):
-                goto("Analyze")
-
+    has_data = bool(sessions)
+    if has_data:
         latest = sessions[-1]
         report = normalize_report(latest.get("ai_report"))
         radar = report["radar"]
         weakest_k, strongest_k = report["weakest_area"], report["strongest_area"]
 
-        st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
-        st.markdown(
-            '<div class="chip-grid">'
-            + chip("Overall Rating", f"{report['overall_rating']:.1f}/10", score_color(report["overall_rating"], 10), report["overall_rating"] * 10)
-            + chip("Weakest Area", RADAR_LABELS.get(weakest_k, weakest_k), "var(--amber)", radar.get(weakest_k, 0))
-            + chip("Strongest Area", RADAR_LABELS.get(strongest_k, strongest_k), "var(--green)", radar.get(strongest_k, 0))
-            + "</div>",
-            unsafe_allow_html=True,
-        )
+    if sub is None:
+        page_title(f"Welcome back, {display_name}", "Every clip makes you better.")
+        if has_data:
+            st.markdown(
+                '<div class="chip-grid">'
+                + chip("Overall Rating", f"{report['overall_rating']:.1f}/10", score_color(report["overall_rating"], 10), report["overall_rating"] * 10)
+                + chip("Weakest Area", RADAR_LABELS.get(weakest_k, weakest_k), "var(--amber)", radar.get(weakest_k, 0))
+                + chip("Strongest Area", RADAR_LABELS.get(strongest_k, strongest_k), "var(--green)", radar.get(strongest_k, 0))
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption("Analyze your game in under 60 seconds. Upload a clip to get started.")
+        hub_go("upload", "🎥  Upload match clip", "Analyze")
+        hub_btn("latest", "📹  Latest analysis")
+        hub_btn("overview", "📊  Performance overview")
+        hub_btn("training", "📋  Recommended training")
+        hub_btn("tracker", "📈  Improvement tracker")
 
-        with st.container(border=True):
-            st.markdown(f"**📹 Latest Analysis** — {latest.get('opponent') or 'Match'} · {latest.get('date', '')}")
+    elif sub == "latest":
+        if has_data:
+            sub_header("📹 Latest analysis", f"{latest.get('opponent') or 'Match'} · {latest.get('date', '')}")
             st.markdown(f"<span class='badge badge-cyan'>{report['performance_score']}/100 PERFORMANCE</span>", unsafe_allow_html=True)
             for finding in report["findings"]:
                 st.write(f"• {finding}")
-            if st.button("View Full Analysis →", key="home_view_full"):
-                st.session_state.viewing_session = len(sessions) - 1
+            if st.button("View Full Analysis →", key="hub_home_full"):
+                ss.viewing_session = len(sessions) - 1
                 goto("History")
+        else:
+            sub_header("📹 Latest analysis", "Your first match report will appear here.")
+            st.markdown(
+                '<div class="thumb"><div class="play">▶</div><span class="dur">??:??</span></div>'
+                '<div class="match-row"><div><div class="match-name">Match vs ???</div><div class="muted">Date ?? · Full Match</div></div>'
+                '<div class="perf-box"><b>??</b><span class="muted">/100</span><small>PERFORMANCE</small></div></div>'
+                '<div class="find-h">AI FINDINGS</div>'
+                '<div class="find"><span class="dot g">✓</span>Your strengths will show up here</div>'
+                '<div class="find"><span class="dot r">!</span>Your biggest weakness, spotted by AI</div>',
+                unsafe_allow_html=True,
+            )
+            hub_go("analyze_first", "Analyze a match →", "Analyze")
 
-        with st.container(border=True):
-            st.markdown("**📊 Performance Overview**")
-            st.plotly_chart(radar_chart(radar), config={"displayModeBar": False}, **CHART_STRETCH)
+    elif sub == "overview":
+        sub_header("📊 Performance overview", "How your skills add up.")
+        if has_data:
+            st.plotly_chart(radar_chart(radar, height=340), config={"displayModeBar": False}, **CHART_STRETCH)
+        else:
+            st.plotly_chart(placeholder_radar(), config={"displayModeBar": False}, **CHART_STRETCH)
+            st.caption("Your radar fills in after your first analysis.")
 
-        with st.container(border=True):
-            st.markdown("**📋 Recommended Training**")
+    elif sub == "training":
+        sub_header("📋 Recommended training", "Drills picked for you.")
+        if has_data:
             for d in report["recommended_drills"]:
                 st.write(f"• {d}")
-            if st.button("Start Training →", key="home_training"):
-                goto("Training")
+        else:
+            preferred = ["First Touch Control", "Cone Dribbling Course", "Weak Foot Passing Wall"]
+            starter = [d for n in preferred for d in drills if d.get("name") == n]
+            for d in drills:
+                if len(starter) >= 3:
+                    break
+                if d.get("difficulty") == "beginner" and d not in starter:
+                    starter.append(d)
+            st.caption("Starter drills — personalized after your first match.")
+            for d in starter[:3]:
+                st.write(f"• **{d.get('name', 'Drill')}** · {d.get('duration_minutes', '?')} min")
+        hub_go("start_training", "Start Training →", "Training")
 
-        if len(sessions) >= 2:
+    elif sub == "tracker":
+        sub_header("📈 Improvement tracker", "Your first match vs your latest.")
+        if has_data and len(sessions) >= 2:
             first_radar = normalize_report(sessions[0].get("ai_report"))["radar"]
-            with st.container(border=True):
-                st.markdown("**📈 Improvement Tracker**")
-                rows = ""
-                for k in RADAR_ORDER:
-                    before, after = first_radar.get(k, 0), radar.get(k, 0)
-                    change = after - before
-                    c = "var(--green)" if change >= 0 else "var(--red)"
-                    rows += (
-                        f'<div class="stat-row"><span>{RADAR_LABELS[k]}</span>'
-                        f'<span>{before} → {after} &nbsp;'
-                        f'<span style="color:{c}">({"+" if change>=0 else ""}{change})</span></span></div>'
-                    )
-                st.markdown(rows, unsafe_allow_html=True)
-
+            rows = ""
+            for k in RADAR_ORDER:
+                before, after = first_radar.get(k, 0), radar.get(k, 0)
+                change = after - before
+                c = "var(--green)" if change >= 0 else "var(--red)"
+                rows += (
+                    f'<div class="stat-row"><span>{RADAR_LABELS[k]}</span>'
+                    f'<span>{before} → {after} &nbsp;'
+                    f'<span style="color:{c}">({"+" if change >= 0 else ""}{change})</span></span></div>'
+                )
+            st.markdown(rows, unsafe_allow_html=True)
+        else:
+            st.info("Analyze at least two matches to see how you're improving.")
+            hub_go("analyze_more", "Analyze a match →", "Analyze")
 
 # ══════════════════════════════════════════════════════════════════════════
 # ANALYZE
 # ══════════════════════════════════════════════════════════════════════════
 elif page == "Analyze":
-    page_title("Analyze Match", "Upload your match footage and stats to get AI insights.")
+    init_analyze_state()
+    sub = ss.sub
+    vid = ss.get("an_video")
 
-    with st.container(border=True):
-        st.markdown("**⬆️ Upload Match Footage**")
-        video_file = st.file_uploader("Drag & drop your video here (MP4, MOV)", type=["mp4", "mov"])
-        st.caption(
-            "Upload a clip and your coach can analyze straight from the video — no stats required. "
-            "It samples a few still frames (not full video tracking), so it's a best-effort read of "
-            "intensity, formation, and play style. For the sharpest report, add whatever stats you can below too."
-        )
-        c1, c2 = st.columns(2)
-        jersey_number = c1.text_input("Jersey number", value=str(profile.get("jersey_number", "")))
-        jersey_color = c2.color_picker("Jersey color", value="#e11d48")
+    if sub is None:
+        page_title("Analyze Match", "Fill in what you can, then tap Analyze.")
+        hub_btn("video", f"🎥  Match video{'   ✅' if vid else ''}")
+        hub_btn("details", "📝  Match details")
+        hub_btn("attack", "⚽  Attacking stats")
+        hub_btn("defend", "🛡️  Defending stats")
+        hub_btn("physical", "🏃  Physical & discipline")
+        analyse_clicked = st.button("Analyze Match ⚽", key="primary_cta")
 
-    with st.container(border=True):
-        st.markdown("**📝 Match Details**")
-        c1, c2 = st.columns(2)
-        with c1:
-            name = st.text_input("Your name", value=profile.get("name", ""))
-            opponent = st.text_input("Opponent", placeholder="e.g. Galaxy FC")
-            goals = st.number_input("Goals scored", min_value=0, max_value=10, value=0)
-        with c2:
-            position = st.selectbox("Your position", POSITIONS, index=_position_index(profile.get("position")))
-            match_date = st.date_input("Match date", value=date.today())
-            assists = st.number_input("Assists", min_value=0, max_value=10, value=0)
+        if analyse_clicked:
+            weakness = ss.an_weakness.strip()
+            if not weakness and not vid:
+                st.warning("Add a match video, or tell your coach your biggest weakness in Match details.")
+            elif ss.an_drib_succ > ss.an_drib_att:
+                st.warning("Successful dribbles can't be higher than dribbles attempted (Attacking stats).")
+            else:
+                video_filename = None
+                frames = []
+                if vid:
+                    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", os.path.basename(vid["name"]))
+                    video_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_name}"
+                    video_path = os.path.join(UPLOAD_DIR, video_filename)
+                    with open(video_path, "wb") as f:
+                        f.write(vid["bytes"])
+                    with st.spinner("Sampling frames from your video..."):
+                        frames = extract_video_frames(video_path)
+                    if not frames:
+                        st.warning("Couldn't read frames from that video — continuing with the stats provided.")
 
-        weakness = st.text_input(
-            "What do you think your biggest weakness was today?"
-            + ("" if video_file is None else " (optional — you've uploaded a video)")
-        )
-        notes = st.text_area("Any other match notes?", placeholder="e.g. I kept losing the ball under pressure in midfield")
+                name, opponent, position = ss.an_name, ss.an_opponent, ss.an_position
+                goals, assists, notes = ss.an_goals, ss.an_assists, ss.an_notes
+                with st.spinner("Your coach is analysing your match..."):
+                    weakness_key = weakness or "unspecified — infer from the match video"
+                    matching_drills = []
+                    for d in drills:
+                        for tag in d.get("tags", []):
+                            if any(w in weakness_key.lower() for w in tag.split("_")):
+                                matching_drills.append(f"{d['name']} — {d['description']}")
+                                break
+                    drills_text = "\n".join(matching_drills) if matching_drills else "\n".join(f"{d['name']} — {d['description']}" for d in drills)
 
-        st.markdown("**📊 Match Stats**")
-        a1, a2, a3 = st.columns(3)
-        shots_on_target = a1.number_input("Shots on target", 0, 30, 0)
-        key_passes = a1.number_input("Key passes", 0, 30, 0)
-        tackles_won = a1.number_input("Tackles won", 0, 20, 0)
-        dribbles_attempted = a2.number_input("Dribbles attempted", 0, 30, 0)
-        dribbles_successful = a2.number_input("Dribbles successful", 0, 30, 0)
-        duels_won = a2.number_input("Duels won", 0, 30, 0)
-        possession_won = a3.number_input("Possession won", 0, 30, 0)
-        distance_km = a3.number_input("Distance covered (km)", 0.0, 20.0, 0.0, step=0.1)
-        sprints = a3.number_input("Sprints", 0, 60, 0)
-        b1, b2, b3 = st.columns(3)
-        fouls_won = b1.number_input("Fouls won", 0, 20, 0)
-        fouls_committed = b2.number_input("Fouls committed", 0, 20, 0)
-        offsides = b3.number_input("Offsides", 0, 10, 0)
-        c1b, c2b = st.columns(2)
-        yellow_cards = c1b.number_input("Yellow cards", 0, 2, 0)
-        red_cards = c2b.number_input("Red cards", 0, 1, 0)
-
-        analyse_clicked = st.button("Analyze Match ⚽")
-
-    # ── past uploads + storage manager ──
-    video_sessions = [s for s in sessions if s.get("video_filename")]
-    colA, colB = st.columns(2)
-    with colA:
-        with st.container(border=True):
-            st.markdown("**📁 Past Uploads**")
-            if not video_sessions:
-                st.caption("No videos uploaded yet.")
-            for s in reversed(video_sessions[-5:]):
-                r = normalize_report(s.get("ai_report"))
-                color = score_color(r["performance_score"])
-                st.markdown(
-                    f"<div class='stat-row'><span>{_esc(s.get('opponent') or 'Match')} · {_esc(s.get('date', ''))}</span>"
-                    f"<span style='color:{color}'>{r['performance_score']}/100</span></div>",
-                    unsafe_allow_html=True,
-                )
-    with colB:
-        with st.container(border=True):
-            st.markdown("**💾 Storage Manager**")
-            total_bytes = sum(
-                os.path.getsize(os.path.join(UPLOAD_DIR, f)) for f in os.listdir(UPLOAD_DIR)
-            ) if os.path.isdir(UPLOAD_DIR) else 0
-            gb_used = total_bytes / (1024 ** 3)
-            st.markdown(f"**{gb_used:.2f} GB** used across {len(os.listdir(UPLOAD_DIR)) if os.path.isdir(UPLOAD_DIR) else 0} files")
-            st.progress(min(gb_used / 10, 1.0))
-
-    if analyse_clicked:
-        if not weakness and video_file is None:
-            st.warning("Tell your coach what your biggest weakness was, or upload a match video!")
-        elif dribbles_successful > dribbles_attempted:
-            st.warning("Successful dribbles can't be higher than dribbles attempted.")
-        else:
-            video_filename = None
-            frames = []
-            if video_file is not None:
-                safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", os.path.basename(video_file.name))
-                video_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_name}"
-                video_path = os.path.join(UPLOAD_DIR, video_filename)
-                with open(video_path, "wb") as f:
-                    f.write(video_file.getbuffer())
-
-                with st.spinner("Sampling frames from your video..."):
-                    frames = extract_video_frames(video_path)
-                if not frames:
-                    st.warning("Couldn't read frames from that video — continuing with the stats provided.")
-
-            with st.spinner("Your coach is analysing your match..."):
-                weakness_key = weakness or "unspecified — infer from the match video"
-                matching_drills = []
-                for d in drills:
-                    for tag in d.get("tags", []):
-                        if any(w in weakness_key.lower() for w in tag.split("_")):
-                            matching_drills.append(f"{d['name']} — {d['description']}")
-                            break
-                drills_text = "\n".join(matching_drills) if matching_drills else "\n".join(f"{d['name']} — {d['description']}" for d in drills)
-
-                player_ctx = f"Player: {name}\nPosition: {position}\nOpponent: {opponent or 'N/A'}"
-                stats_ctx = f"""Match stats:
+                    player_ctx = f"Player: {name}\nPosition: {position}\nOpponent: {opponent or 'N/A'}"
+                    stats_ctx = f"""Match stats:
 - Goals: {goals}, Assists: {assists}
-- Shots on target: {shots_on_target}, Key passes: {key_passes}, Tackles won: {tackles_won}
-- Dribbles: {dribbles_successful}/{dribbles_attempted} successful, Duels won: {duels_won}
-- Possession won: {possession_won}, Distance: {distance_km} km, Sprints: {sprints}
-- Fouls won: {fouls_won}, Fouls committed: {fouls_committed}, Offsides: {offsides}
-- Cards: {yellow_cards} yellow, {red_cards} red
+- Shots on target: {ss.an_shots}, Key passes: {ss.an_keypasses}, Tackles won: {ss.an_tackles}
+- Dribbles: {ss.an_drib_succ}/{ss.an_drib_att} successful, Duels won: {ss.an_duels}
+- Possession won: {ss.an_possession}, Distance: {ss.an_distance} km, Sprints: {ss.an_sprints}
+- Fouls won: {ss.an_fouls_won}, Fouls committed: {ss.an_fouls_comm}, Offsides: {ss.an_offsides}
+- Cards: {ss.an_yellow} yellow, {ss.an_red} red
 - Self-reported weakness: {weakness or 'Not provided'}
 - Match notes: {notes or 'None provided'}"""
 
-                report, raw_fallback = run_analysis(player_ctx, stats_ctx, drills_text, frames=frames)
+                    report, raw_fallback = run_analysis(player_ctx, stats_ctx, drills_text, frames=frames)
 
-            if report is None:
-                st.error("Your coach couldn't produce a readable report this time. Please try again.")
-                with st.expander("Details"):
-                    st.write(raw_fallback)
-            else:
-                dribble_pct = round(100 * dribbles_successful / dribbles_attempted) if dribbles_attempted else None
+                if report is None:
+                    st.error("Your coach couldn't produce a readable report this time. Please try again.")
+                    with st.expander("Details"):
+                        st.write(raw_fallback)
+                else:
+                    dribble_pct = round(100 * ss.an_drib_succ / ss.an_drib_att) if ss.an_drib_att else None
+                    save_session({
+                        "date": ss.an_date.strftime("%d %b %Y"),
+                        "name": name, "position": position, "opponent": opponent,
+                        "video_filename": video_filename,
+                        "analyzed_from_video": bool(frames),
+                        "goals": goals, "assists": assists,
+                        "shots_on_target": ss.an_shots, "key_passes": ss.an_keypasses, "tackles_won": ss.an_tackles,
+                        "dribbles_attempted": ss.an_drib_att, "dribbles_successful": ss.an_drib_succ,
+                        "dribble_pct": dribble_pct,
+                        "duels_won": ss.an_duels, "possession_won": ss.an_possession, "distance_km": ss.an_distance,
+                        "sprints": ss.an_sprints, "fouls_won": ss.an_fouls_won, "fouls_committed": ss.an_fouls_comm,
+                        "offsides": ss.an_offsides, "yellow_cards": ss.an_yellow, "red_cards": ss.an_red,
+                        "weakness": weakness, "notes": notes,
+                        "ai_report": report,
+                    })
+                    profile["name"], profile["position"] = name, position
+                    if ss.an_jersey:
+                        profile["jersey_number"] = ss.an_jersey
+                    save_profile(profile)
+                    reset_analyze_state()
+                    ss.viewing_session = len(load_sessions()) - 1
+                    goto("History")
 
-                save_session({
-                    "date": match_date.strftime("%d %b %Y"),
-                    "name": name, "position": position, "opponent": opponent,
-                    "video_filename": video_filename,
-                    "analyzed_from_video": bool(frames),
-                    "goals": goals, "assists": assists,
-                    "shots_on_target": shots_on_target, "key_passes": key_passes, "tackles_won": tackles_won,
-                    "dribbles_attempted": dribbles_attempted, "dribbles_successful": dribbles_successful,
-                    "dribble_pct": dribble_pct,
-                    "duels_won": duels_won, "possession_won": possession_won, "distance_km": distance_km,
-                    "sprints": sprints, "fouls_won": fouls_won, "fouls_committed": fouls_committed,
-                    "offsides": offsides, "yellow_cards": yellow_cards, "red_cards": red_cards,
-                    "weakness": weakness, "notes": notes,
-                    "ai_report": report,
-                })
-                profile["name"], profile["position"] = name, position
-                if jersey_number:
-                    profile["jersey_number"] = jersey_number
-                save_profile(profile)
+    elif sub == "video":
+        sub_header("🎥 Match video", "Optional — your coach can analyze straight from the clip.")
+        up_n = ss.get("an_up_n", 0)
+        f = st.file_uploader("Choose a video (MP4 or MOV)", type=["mp4", "mov"], key=f"an_uploader_{up_n}")
+        if f is not None and (not vid or vid["name"] != f.name or len(vid["bytes"]) != f.size):
+            ss.an_video = {"name": f.name, "bytes": f.getvalue()}
+            vid = ss.an_video
+        if vid:
+            st.success(f"Attached: {vid['name']} ({len(vid['bytes']) / 1e6:.0f} MB)")
 
-                st.success("✅ Match analyzed and saved!")
-                st.session_state.viewing_session = len(load_sessions()) - 1
-                goto("History")
+            def _remove_video():
+                ss.pop("an_video", None)
+                ss.an_up_n = ss.get("an_up_n", 0) + 1
+
+            st.button("Remove video", key="an_remove_video", on_click=_remove_video)
+        st.text_input("Jersey number", key="an_jersey")
+        st.color_picker("Jersey color", key="an_jersey_color")
+        st.caption("Your coach samples a few still frames, so it's a best-effort read of intensity and play style.")
+
+    elif sub == "details":
+        sub_header("📝 Match details")
+        st.text_input("Your name", key="an_name")
+        st.text_input("Opponent", key="an_opponent", placeholder="e.g. Galaxy FC")
+        st.selectbox("Your position", POSITIONS, key="an_position")
+        st.date_input("Match date", key="an_date")
+        st.text_input("Biggest weakness today?", key="an_weakness")
+        if vid:
+            st.caption("Optional — you've attached a video.")
+        st.text_area("Other match notes", key="an_notes", height=70,
+                     placeholder="e.g. I kept losing the ball under pressure in midfield")
+
+    elif sub == "attack":
+        sub_header("⚽ Attacking stats")
+        st.number_input("Goals scored", 0, 10, key="an_goals")
+        st.number_input("Assists", 0, 10, key="an_assists")
+        st.number_input("Shots on target", 0, 30, key="an_shots")
+        st.number_input("Key passes", 0, 30, key="an_keypasses")
+        st.number_input("Dribbles attempted", 0, 30, key="an_drib_att")
+        st.number_input("Dribbles successful", 0, 30, key="an_drib_succ")
+
+    elif sub == "defend":
+        sub_header("🛡️ Defending stats")
+        st.number_input("Tackles won", 0, 20, key="an_tackles")
+        st.number_input("Duels won", 0, 30, key="an_duels")
+        st.number_input("Possession won", 0, 30, key="an_possession")
+        st.number_input("Fouls won", 0, 20, key="an_fouls_won")
+        st.number_input("Fouls committed", 0, 20, key="an_fouls_comm")
+
+    elif sub == "physical":
+        sub_header("🏃 Physical & discipline")
+        st.number_input("Distance covered (km)", 0.0, 20.0, step=0.1, key="an_distance")
+        st.number_input("Sprints", 0, 60, key="an_sprints")
+        st.number_input("Offsides", 0, 10, key="an_offsides")
+        st.number_input("Yellow cards", 0, 2, key="an_yellow")
+        st.number_input("Red cards", 0, 1, key="an_red")
 
 # ══════════════════════════════════════════════════════════════════════════
 # DRILLS
 # ══════════════════════════════════════════════════════════════════════════
 elif page == "Drills":
-    page_title("🏃 Drill Library", "Build your training toolkit, one drill at a time.")
-
-    all_tags = sorted({t for d in drills for t in d.get("tags", [])})
-    selected_tag = st.selectbox("Filter by skill", ["All"] + all_tags)
-
+    sub = ss.sub
     completed = set(profile.get("completed_drills", []))
     diff_badge = {"easy": "badge-green", "beginner": "badge-green", "medium": "badge-amber",
                   "intermediate": "badge-amber", "hard": "badge-red", "advanced": "badge-red"}
 
-    for d in drills:
-        if selected_tag != "All" and selected_tag not in d.get("tags", []):
-            continue
-        with st.container(border=True):
-            b = diff_badge.get(str(d.get("difficulty", "")).lower(), "badge-cyan")
-            done = d["name"] in completed
-            st.markdown(
-                f"**{'✅ ' if done else ''}{d['name']}** &nbsp; "
-                f"<span class='badge {b}'>{d['difficulty']}</span> "
-                f"<span class='badge badge-cyan'>⏱ {d['duration_minutes']} min</span> "
-                f"<span class='badge badge-cyan'>👥 {d['players_needed']}</span>",
-                unsafe_allow_html=True,
-            )
-            with st.expander("Details"):
-                st.write(f"**Description:** {d['description']}")
-                st.write(f"**Setup:** {d['setup']}")
-                st.write(f"**Reps:** {d['reps']}")
-                st.write(f"**Objective:** {d['objective']}")
-                if st.button("Mark Complete" if not done else "Mark Incomplete", key=f"drill_{d['name']}"):
-                    if done:
-                        completed.discard(d["name"])
-                    else:
-                        completed.add(d["name"])
-                    profile["completed_drills"] = list(completed)
-                    save_profile(profile)
-                    st.rerun()
+    if sub is None:
+        page_title("🏃 Drill Library", "Tap a drill to see how it works.")
+        all_tags = sorted({t for d in drills for t in d.get("tags", [])})
+        selected_tag = st.selectbox("Filter by skill", ["All"] + all_tags, key="drill_filter")
+        shown = [d for d in drills if selected_tag == "All" or selected_tag in d.get("tags", [])]
+        chunk, cur, pages = paginate(shown, 4, f"drills_{selected_tag}")
+        if not shown:
+            st.caption("No drills for that skill yet.")
+        for d in chunk:
+            done = d.get("name") in completed
+            label = f"{'✅ ' if done else ''}{d.get('name', 'Drill')}  ·  {d.get('duration_minutes', '?')} min"
+            st.button(label, key=f"hub_drill_{d.get('name')}", on_click=open_sub, args=(f"drill:{d.get('name')}",))
+        pager(f"drills_{selected_tag}", cur, pages)
+
+    elif sub.startswith("drill:"):
+        d = next((x for x in drills if x.get("name") == sub[6:]), None)
+        if d is None:
+            close_sub()
+            st.rerun()
+        done = d["name"] in completed
+        sub_header(f"{'✅ ' if done else ''}{d['name']}")
+        b = diff_badge.get(str(d.get("difficulty", "")).lower(), "badge-cyan")
+        st.markdown(
+            f"<span class='badge {b}'>{_esc(d.get('difficulty', ''))}</span> "
+            f"<span class='badge badge-cyan'>⏱ {_esc(d.get('duration_minutes', '?'))} min</span> "
+            f"<span class='badge badge-cyan'>👥 {_esc(d.get('players_needed', '?'))}</span>",
+            unsafe_allow_html=True,
+        )
+        st.write(f"**Description:** {d.get('description', '')}")
+        st.write(f"**Setup:** {d.get('setup', '')}")
+        st.write(f"**Reps:** {d.get('reps', '')}")
+        st.write(f"**Objective:** {d.get('objective', '')}")
+        if st.button("Mark Complete" if not done else "Mark Incomplete", key="primary_cta"):
+            if done:
+                completed.discard(d["name"])
+            else:
+                completed.add(d["name"])
+            profile["completed_drills"] = list(completed)
+            save_profile(profile)
+            st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════
 # TRAINING
 # ══════════════════════════════════════════════════════════════════════════
 elif page == "Training":
-    page_title("📅 Training", "Train smarter. Improve faster.")
-
+    sub = ss.sub
     training_log = load_training_log()
     completed_drills = set(profile.get("completed_drills", []))
 
-    with st.container(border=True):
+    if sub is None:
+        page_title("📅 Training", "Train smarter. Improve faster.")
         st.markdown(f"**Trainings completed:** {len(training_log)} &nbsp;·&nbsp; **Drills mastered:** {len(completed_drills)}/{len(drills)}")
         st.progress(min(len(completed_drills) / max(len(drills), 1), 1.0))
+        hub_btn("plan", "📋  Build today's plan")
+        if ss.get("current_plan"):
+            hub_btn("viewplan", "📄  View today's plan")
+        hub_go("drills", "🏃  Browse drills", "Drills")
 
-    if not sessions:
-        st.info("Analyze a match first so your coach can build a plan focused on your weaknesses.")
-    else:
-        last = sessions[-1]
-        with st.container(border=True):
+    elif sub == "plan":
+        sub_header("📋 Build today's plan", "Your coach builds a session around your weakness.")
+        if not sessions:
+            st.info("Analyze a match first so your coach can build a plan focused on your weaknesses.")
+        else:
+            last = sessions[-1]
             st.markdown(f"<span class='badge badge-amber'>Last weakness</span> {_esc(last.get('weakness') or 'Not specified — analyzed from video')}", unsafe_allow_html=True)
-            focus = st.selectbox("What do you want to focus on today?",
-                                  ["My biggest weakness", "Passing", "Dribbling", "Finishing", "Defending", "Fitness"])
+            focus = st.selectbox("Focus for today",
+                                 ["My biggest weakness", "Passing", "Dribbling", "Finishing", "Defending", "Fitness"])
             duration = st.selectbox("Session duration", ["30 minutes", "45 minutes", "60 minutes", "90 minutes"])
-            generate = st.button("Generate Training Plan 📋")
-
-        if generate:
-            with st.spinner("Building your session plan..."):
-                drills_list = "\n".join(f"{d['name']} ({d['duration_minutes']} mins) — {d['description']}" for d in drills)
-                prompt = f"""You are an elite football coach building a training session plan.
+            if st.button("Generate Training Plan 📋", key="primary_cta"):
+                with st.spinner("Building your session plan..."):
+                    drills_list = "\n".join(f"{d['name']} ({d['duration_minutes']} mins) — {d['description']}" for d in drills)
+                    prompt = f"""You are an elite football coach building a training session plan.
 Player's last match weakness: {last.get('weakness') or 'not specified'}
 Today's focus: {focus}
 Session duration: {duration}
@@ -1401,30 +1470,46 @@ Build a complete training session plan with:
 3. Cool down (5 mins)
 4. One key coaching point
 
-Format clearly using markdown headers."""
-                try:
-                    response = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
-                    st.session_state.current_plan = response.choices[0].message.content
-                except Exception as e:
-                    st.error(f"Couldn't build the plan right now: {e}")
-
-        if st.session_state.get("current_plan"):
-            with st.container(border=True):
-                st.markdown(st.session_state.current_plan)
-                if st.button("Mark Today's Training Complete ✅"):
-                    log_training_complete()
-                    st.success("Logged! Great work today.")
+Keep the whole plan under 250 words. Format clearly using markdown."""
+                    plan_ok = False
+                    try:
+                        response = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
+                        ss.current_plan = response.choices[0].message.content
+                        ss.sub = "viewplan"
+                        plan_ok = True
+                    except Exception as e:
+                        st.error(f"Couldn't build the plan right now: {e}")
+                if plan_ok:
                     st.rerun()
+
+    elif sub == "viewplan":
+        sub_header("📄 Today's plan")
+        if ss.get("current_plan"):
+            st.markdown(ss.current_plan)
+            if st.button("Mark Today's Training Complete ✅", key="primary_cta"):
+                log_training_complete()
+                ss.sub = None
+                st.toast("Logged! Great work today.")
+                st.rerun()
+        else:
+            st.info("No plan yet — build one first.")
 
 # ══════════════════════════════════════════════════════════════════════════
 # PROGRESS
 # ══════════════════════════════════════════════════════════════════════════
 elif page == "Progress":
-    page_title("📈 Progress", "Track your improvement. See results.")
+    sub = ss.sub
+    if sub is None:
+        page_title("📈 Progress", "Track your improvement. See results.")
+        if not sessions:
+            st.info("Analyze at least one match to start tracking progress.")
+            hub_go("analyze_first", "🎥  Analyze a match", "Analyze")
+        else:
+            hub_btn("numbers", "📊  My numbers")
+            hub_btn("compare", "📈  Compare two matches")
 
-    if len(sessions) < 1:
-        st.info("Analyze at least one match to start tracking progress.")
-    else:
+    elif sub == "numbers":
+        sub_header("📊 My numbers")
         training_log = load_training_log()
         ratings = [normalize_report(s.get("ai_report"))["overall_rating"] for s in sessions]
         st.markdown(
@@ -1437,245 +1522,286 @@ elif page == "Progress":
             unsafe_allow_html=True,
         )
 
-        if len(sessions) >= 2:
-            with st.container(border=True):
-                st.markdown("**📊 Week's Progress**")
-                labels = [f"{s.get('opponent') or 'Match'} · {s.get('date', '')}" for s in sessions]
-                idx_a, idx_b = st.select_slider(
-                    "Compare two matches", options=list(range(len(sessions))),
-                    value=(0, len(sessions) - 1), format_func=lambda i: labels[i],
-                )
-                fig = compare_line_chart(normalize_report(sessions[idx_a].get("ai_report"))["radar"],
-                                          normalize_report(sessions[idx_b].get("ai_report"))["radar"],
-                                          labels[idx_a], labels[idx_b])
-                st.plotly_chart(fig, config={"displayModeBar": False}, **CHART_STRETCH)
+    elif sub == "compare":
+        sub_header("📈 Compare two matches")
+        if len(sessions) < 2:
+            st.info("Analyze a second match to unlock the comparison chart.")
         else:
-            st.caption("Analyze a second match to unlock the comparison chart.")
+            labels = [f"{s.get('opponent') or 'Match'} · {s.get('date', '')}" for s in sessions]
+            idx_a, idx_b = st.select_slider(
+                "Compare", options=list(range(len(sessions))),
+                value=(0, len(sessions) - 1), format_func=lambda i: labels[i],
+            )
+            fig = compare_line_chart(normalize_report(sessions[idx_a].get("ai_report"))["radar"],
+                                      normalize_report(sessions[idx_b].get("ai_report"))["radar"],
+                                      labels[idx_a], labels[idx_b])
+            fig.update_layout(height=300)
+            st.plotly_chart(fig, config={"displayModeBar": False}, **CHART_STRETCH)
 
 # ══════════════════════════════════════════════════════════════════════════
 # DIET
 # ══════════════════════════════════════════════════════════════════════════
 elif page == "Diet":
-    page_title("🥗 Diet", "Fuel your body. Maximize your performance.")
-
     PLAYSTYLE_MULTIPLIER = {
         "Box-to-Box": 1.75, "Wing-Back": 1.75, "False Nine": 1.65, "Playmaker": 1.6,
         "Target Man": 1.6, "Sweeper": 1.55, "Ball-Winner": 1.7,
     }
+    ss.setdefault("df_sex", "Male")
+    ss.setdefault("df_age", 20)
+    ss.setdefault("df_height", 175)
+    ss.setdefault("df_weight", 70)
+    ss.setdefault("df_style", list(PLAYSTYLE_MULTIPLIER)[0])
+    ss.setdefault("df_goal", "Maintain")
+    ss.setdefault("df_restr", "")
+    sub = ss.sub
 
-    with st.container(border=True):
-        st.markdown("**🧮 Diet Calculator**")
-        c1, c2 = st.columns(2)
-        with c1:
-            sex = st.selectbox("Sex", ["Male", "Female"])
-            age = st.number_input("Age", 10, 60, 20)
-            height_cm = st.number_input("Height (cm)", 120, 220, 175)
-        with c2:
-            weight_kg = st.number_input("Weight (kg)", 30, 150, 70)
-            playstyle = st.selectbox("Play-style", list(PLAYSTYLE_MULTIPLIER.keys()))
-            goal_options = ["Maintain", "Build muscle"] + (["Cut weight"] if age >= 18 else [])
-            goal = st.selectbox("Goal", goal_options)
-            if age < 18:
-                st.caption("Weight-cut targets aren't offered under 18. Growing athletes should check with a doctor or dietitian.")
-        restrictions = st.text_input("Dietary restrictions (optional)", placeholder="e.g. No dairy, no shellfish")
-        calc = st.button("Calculate My Diet Plan 🧮")
+    if sub is None:
+        page_title("🥗 Diet", "Fuel your body. Maximize your performance.")
+        hub_btn("body", "🧍  Body stats")
+        hub_btn("goal", "🎯  Goal & play-style")
+        calc = st.button("Calculate My Diet Plan 🧮", key="primary_cta")
+        if ss.get("diet_result"):
+            hub_btn("result", "📊  My daily targets")
+            hub_btn("meal", "🍽️  Sample meal plan")
 
-    if calc:
-        st.session_state.pop("diet_plan", None)
-        bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age + (5 if sex == "Male" else -161)
-        tdee = bmr * PLAYSTYLE_MULTIPLIER[playstyle]
-        if goal == "Build muscle":
-            tdee += 300
-        elif goal == "Cut weight":
-            tdee -= 300
-        tdee = max(tdee, 1500 if sex == "Male" else 1200)  # never recommend a crash-diet calorie level
+        if calc:
+            ss.pop("diet_plan", None)
+            sex, age, height_cm, weight_kg = ss.df_sex, ss.df_age, ss.df_height, ss.df_weight
+            goal = ss.df_goal if (ss.df_goal != "Cut weight" or age >= 18) else "Maintain"
+            bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age + (5 if sex == "Male" else -161)
+            tdee = bmr * PLAYSTYLE_MULTIPLIER[ss.df_style]
+            if goal == "Build muscle":
+                tdee += 300
+            elif goal == "Cut weight":
+                tdee -= 300
+            tdee = max(tdee, 1500 if sex == "Male" else 1200)  # never recommend a crash-diet calorie level
+            protein_g = round(weight_kg * 2.0)
+            fat_g = round((tdee * 0.27) / 9)
+            carbs_g = round(max(tdee - (protein_g * 4) - (fat_g * 9), 0) / 4)
+            ss.diet_result = dict(
+                calories=round(tdee), protein=protein_g, carbs=carbs_g, fat=fat_g,
+                fiber=round(tdee / 1000 * 14), water=round(weight_kg * 0.033 + 0.6, 1),
+                restrictions=ss.df_restr,
+            )
+            ss.sub = "result"
+            st.rerun()
 
-        protein_g = round(weight_kg * 2.0)
-        fat_g = round((tdee * 0.27) / 9)
-        remaining_cal = tdee - (protein_g * 4) - (fat_g * 9)
-        carbs_g = round(max(remaining_cal, 0) / 4)
-        fiber_g = round(tdee / 1000 * 14)
-        water_l = round(weight_kg * 0.033 + 0.6, 1)
+    elif sub == "body":
+        sub_header("🧍 Body stats")
+        st.selectbox("Sex", ["Male", "Female"], key="df_sex")
+        st.number_input("Age", 10, 60, key="df_age")
+        st.number_input("Height (cm)", 120, 220, key="df_height")
+        st.number_input("Weight (kg)", 30, 150, key="df_weight")
 
-        st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
-        st.markdown(
-            '<div class="chip-grid">'
-            + chip("Calories", f"{round(tdee)} kcal", "var(--red)")
-            + chip("Protein", f"{protein_g} g", "var(--amber)")
-            + chip("Carbs", f"{carbs_g} g", "var(--cyan)")
-            + chip("Fats", f"{fat_g} g", "var(--purple)")
-            + chip("Fiber", f"{fiber_g} g", "var(--green)")
-            + chip("Water", f"{water_l} L", "var(--blue)")
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-        st.session_state.diet_result = dict(
-            calories=round(tdee), protein=protein_g, carbs=carbs_g, fat=fat_g,
-            fiber=fiber_g, water=water_l, restrictions=restrictions,
-        )
+    elif sub == "goal":
+        sub_header("🎯 Goal & play-style")
+        goal_options = ["Maintain", "Build muscle"] + (["Cut weight"] if ss.df_age >= 18 else [])
+        if ss.df_goal not in goal_options:
+            ss.df_goal = "Maintain"
+        st.selectbox("Play-style", list(PLAYSTYLE_MULTIPLIER.keys()), key="df_style")
+        st.selectbox("Goal", goal_options, key="df_goal")
+        if ss.df_age < 18:
+            st.caption("Weight-cut targets aren't offered under 18. Growing athletes should check with a doctor or dietitian.")
+        st.text_input("Dietary restrictions (optional)", key="df_restr", placeholder="e.g. No dairy, no shellfish")
 
-    if st.session_state.get("diet_result"):
-        with st.container(border=True):
-            st.markdown("**🍽️ Sample Meal Plan**")
-            if st.button("Generate Sample Meal Plan"):
-                dr = st.session_state.diet_result
+    elif sub == "result":
+        sub_header("📊 My daily targets")
+        dr = ss.get("diet_result")
+        if not dr:
+            st.info("Tap Calculate on the Diet menu first.")
+        else:
+            st.markdown(
+                '<div class="chip-grid">'
+                + chip("Calories", f"{dr['calories']} kcal", "var(--red)")
+                + chip("Protein", f"{dr['protein']} g", "var(--amber)")
+                + chip("Carbs", f"{dr['carbs']} g", "var(--cyan)")
+                + chip("Fats", f"{dr['fat']} g", "var(--purple)")
+                + chip("Fiber", f"{dr['fiber']} g", "var(--green)")
+                + chip("Water", f"{dr['water']} L", "var(--blue)")
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+            hub_btn("meal_from_result", "🍽️  Sample meal plan", sub="meal")
+
+    elif sub == "meal":
+        sub_header("🍽️ Sample meal plan")
+        dr = ss.get("diet_result")
+        if not dr:
+            st.info("Tap Calculate on the Diet menu first.")
+        else:
+            if ss.get("diet_plan"):
+                st.markdown(ss.diet_plan)
+            elif st.button("Generate Sample Meal Plan", key="primary_cta"):
                 prompt = f"""You are a sports nutritionist for a competitive football player.
 Daily targets: {dr['calories']} kcal, {dr['protein']}g protein, {dr['carbs']}g carbs, {dr['fat']}g fat, {dr['fiber']}g fiber.
 Dietary restrictions: {dr['restrictions'] or 'none'}.
-Suggest a simple one-day meal plan (breakfast, lunch, dinner, 1 snack) that roughly hits these targets. Keep it practical and concise, using markdown."""
+Suggest a simple one-day meal plan (breakfast, lunch, dinner, 1 snack) that roughly hits these targets. Keep it practical and under 220 words, using markdown."""
+                meal_ok = False
                 with st.spinner("Building your meal plan..."):
                     try:
                         response = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
-                        st.session_state.diet_plan = response.choices[0].message.content
+                        ss.diet_plan = response.choices[0].message.content
+                        meal_ok = True
                     except Exception as e:
                         st.error(f"Couldn't build the meal plan right now: {e}")
-            if st.session_state.get("diet_plan"):
-                st.markdown(st.session_state.diet_plan)
+                if meal_ok:
+                    st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════
 # PROFILE
 # ══════════════════════════════════════════════════════════════════════════
 elif page == "Profile":
-    page_title("Profile", "Your journey. Your stats. Your growth.")
-
-    with st.container(border=True):
-        c1, c2 = st.columns(2)
-        name = c1.text_input("Name", value=profile.get("name", ""))
-        jersey_number = c2.text_input("Jersey number", value=str(profile.get("jersey_number", "")))
-        position = st.selectbox("Position", POSITIONS, index=_position_index(profile.get("position")))
-        if st.button("Save Profile"):
-            profile.update({"name": name, "jersey_number": jersey_number, "position": position})
-            save_profile(profile)
-            st.success("Saved!")
-
-    with st.container(border=True):
+    sub = ss.sub
+    if sub is None:
+        page_title("Profile", "Your journey. Your stats. Your growth.")
+        hub_btn("edit", "✏️  Edit profile")
+        hub_btn("stats", "📊  My stats")
+        hub_btn("storage", "💾  Videos & storage")
+        hub_go("history", "📋  Match history", "History")
         try:
             authenticator.logout("Log out", "main", key="logout_btn")
         except TypeError:  # older streamlit-authenticator versions have no `key` argument
             authenticator.logout("Log out", "main")
 
-    training_log = load_training_log()
-    ratings = [normalize_report(s.get("ai_report"))["overall_rating"] for s in sessions]
-    goals_total = sum(s.get("goals", 0) for s in sessions)
-    assists_total = sum(s.get("assists", 0) for s in sessions)
+    elif sub == "edit":
+        sub_header("✏️ Edit profile")
+        name = st.text_input("Name", value=profile.get("name", ""))
+        jersey_number = st.text_input("Jersey number", value=str(profile.get("jersey_number", "")))
+        position = st.selectbox("Position", POSITIONS, index=_position_index(profile.get("position")))
+        if st.button("Save Profile", key="primary_cta"):
+            profile.update({"name": name, "jersey_number": jersey_number, "position": position})
+            save_profile(profile)
+            ss.sub = None
+            st.toast("Profile saved!")
+            st.rerun()
 
-    st.markdown(
-        '<div class="chip-grid">'
-        + chip("Matches Uploaded", len(sessions), "var(--cyan)")
-        + chip("Trainings Completed", len(training_log), "var(--green)")
-        + chip("Best Performance", f"{max(ratings):.1f}" if ratings else "—", "var(--amber)")
-        + "</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="chip-grid">'
-        + chip("Goals Scored", goals_total, "var(--cyan)")
-        + chip("Assists", assists_total, "var(--cyan)")
-        + chip("Average Rating", f"{(sum(ratings)/len(ratings)):.1f}" if ratings else "—", "var(--purple)")
-        + "</div>",
-        unsafe_allow_html=True,
-    )
-
-    if sessions:
-        all_radars = [normalize_report(s.get("ai_report"))["radar"] for s in sessions]
-        avg_radar = {k: round(sum(r.get(k, 0) for r in all_radars) / len(all_radars)) for k in RADAR_ORDER}
-        buckets = {
-            "Attacking": ["shooting", "off_ball_movement"],
-            "Defending": ["defending"],
-            "Fitness": ["fitness"],
-            "Technical": ["dribbling", "ball_control"],
-            "Tactical": ["passing", "vision"],
-        }
-        with st.container(border=True):
-            st.markdown("**📊 Performance Overview (all-time average)**")
+    elif sub == "stats":
+        sub_header("📊 My stats")
+        training_log = load_training_log()
+        ratings = [normalize_report(s.get("ai_report"))["overall_rating"] for s in sessions]
+        goals_total = sum(s.get("goals", 0) for s in sessions)
+        assists_total = sum(s.get("assists", 0) for s in sessions)
+        st.markdown(
+            '<div class="chip-grid">'
+            + chip("Matches Uploaded", len(sessions), "var(--cyan)")
+            + chip("Trainings Completed", len(training_log), "var(--green)")
+            + chip("Best Performance", f"{max(ratings):.1f}" if ratings else "—", "var(--amber)")
+            + "</div>"
+            + '<div class="chip-grid">'
+            + chip("Goals Scored", goals_total, "var(--cyan)")
+            + chip("Assists", assists_total, "var(--cyan)")
+            + chip("Average Rating", f"{(sum(ratings) / len(ratings)):.1f}" if ratings else "—", "var(--purple)")
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+        if sessions:
+            all_radars = [normalize_report(s.get("ai_report"))["radar"] for s in sessions]
+            avg_radar = {k: round(sum(r.get(k, 0) for r in all_radars) / len(all_radars)) for k in RADAR_ORDER}
+            buckets = {
+                "Attacking": ["shooting", "off_ball_movement"], "Defending": ["defending"], "Fitness": ["fitness"],
+                "Technical": ["dribbling", "ball_control"], "Tactical": ["passing", "vision"],
+            }
+            st.markdown("**All-time average**")
             for label, keys in buckets.items():
                 val = round(sum(avg_radar[k] for k in keys) / len(keys))
                 st.markdown(
-                    f"<div style='margin-bottom:.5rem'><div class='stat-row'><span>{label}</span><span>{val}%</span></div>"
+                    f"<div style='margin-bottom:.4rem'><div class='stat-row'><span>{label}</span><span>{val}%</span></div>"
                     f"<div class='bar-track'><div class='bar-fill' style='width:{val}%;background:{score_color(val)}'></div></div></div>",
                     unsafe_allow_html=True,
                 )
 
-# ══════════════════════════════════════════════════════════════════════════
-# HISTORY / FULL ANALYSIS + DETAILED BREAKDOWN
-# ══════════════════════════════════════════════════════════════════════════
-elif page == "History":
-    if st.session_state.viewing_session is None:
-        page_title("📋 Match History", "Every match logged. Every trend tracked.")
-        if not sessions:
-            st.info("No sessions saved yet. Analyze a match first!")
-        else:
-            for i, s in reversed(list(enumerate(sessions))):
-                r = normalize_report(s.get("ai_report"))
-                with st.container(border=True):
-                    st.markdown(
-                        f"**{_esc(s.get('opponent') or 'Match')}** &nbsp; "
-                        f"<span class='badge badge-cyan'>{_esc(s.get('date', ''))}</span> &nbsp; "
-                        f"<span class='badge {'badge-green' if r['performance_score']>=70 else 'badge-amber' if r['performance_score']>=40 else 'badge-red'}'>{r['performance_score']}/100</span>",
-                        unsafe_allow_html=True,
-                    )
-                    if st.button("View Full Analysis →", key=f"hist_{i}"):
-                        st.session_state.viewing_session = i
-                        st.rerun()
-    else:
-        i = st.session_state.viewing_session
-        if not isinstance(i, int) or not (0 <= i < len(sessions)):
-            st.session_state.viewing_session = None
-            st.rerun()
-        s = sessions[i]
-        r = normalize_report(s.get("ai_report"))
-        if st.button("← Back to Match History"):
-            st.session_state.viewing_session = None
-            st.rerun()
-
-        page_title(s.get("opponent") or "Match", f"{s.get('date', '')} · {s.get('position', '')}")
-        if s.get("analyzed_from_video"):
-            st.markdown("<span class='badge badge-cyan'>📹 Analyzed from video</span>", unsafe_allow_html=True)
-
-        if s.get("video_filename"):
-            vid_path = os.path.join(UPLOAD_DIR, s["video_filename"])
-            if os.path.exists(vid_path):
-                st.video(vid_path)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            with st.container(border=True):
-                st.markdown("**🧠 AI Findings**")
-                st.write(f"**Strengths:** {r['strengths']}")
-                st.write(f"**Improvement:** {r['improvement']}")
-                st.write(f"**Tactical Insight:** {r['tactical_insight']}")
-                st.write(f"**Key Moment:** {r['key_moment']}")
-                st.markdown(f"<div class='quote-box'>⭐ {_esc(r['key_takeaway'])}</div>", unsafe_allow_html=True)
-        with col2:
-            with st.container(border=True):
-                st.markdown("**📈 Match Stats**")
-                stat_pairs = [
-                    ("Goals", s.get("goals")), ("Assists", s.get("assists")),
-                    ("Shots on Target", s.get("shots_on_target")),
-                    ("Dribble Success", f"{s.get('dribble_pct')}%" if s.get("dribble_pct") is not None else "—"),
-                    ("Key Passes", s.get("key_passes")),
-                    ("Tackles Won", s.get("tackles_won")), ("Duels Won", s.get("duels_won")),
-                    ("Possession Won", s.get("possession_won")), ("Distance", f"{s.get('distance_km')} km"),
-                    ("Sprints", s.get("sprints")), ("Yellow Cards", s.get("yellow_cards")),
-                    ("Red Cards", s.get("red_cards")),
-                ]
-                rows = "".join(f"<div class='stat-row'><span>{k}</span><span>{'—' if v is None else v}</span></div>" for k, v in stat_pairs)
-                st.markdown(rows, unsafe_allow_html=True)
-
-        with st.container(border=True):
-            rcolor = score_color(r["overall_rating"], 10)
+    elif sub == "storage":
+        sub_header("💾 Videos & storage")
+        files = os.listdir(UPLOAD_DIR) if os.path.isdir(UPLOAD_DIR) else []
+        total_bytes = sum(os.path.getsize(os.path.join(UPLOAD_DIR, f)) for f in files)
+        gb_used = total_bytes / (1024 ** 3)
+        st.markdown(f"**{gb_used:.2f} GB** used across {len(files)} files")
+        st.progress(min(gb_used / 10, 1.0))
+        st.markdown("**Recent uploads**")
+        video_sessions = [s for s in sessions if s.get("video_filename")]
+        if not video_sessions:
+            st.caption("No videos uploaded yet.")
+        for s in reversed(video_sessions[-4:]):
+            r = normalize_report(s.get("ai_report"))
+            color = score_color(r["performance_score"])
             st.markdown(
-                f"<div style='text-align:center'><div style='color:var(--muted)'>OVERALL RATING</div>"
-                f"<div style='font-family:Sora,sans-serif;font-weight:800;font-size:2.6rem;color:{rcolor}'>{r['overall_rating']:.1f}</div></div>",
+                f"<div class='stat-row'><span>{_esc(s.get('opponent') or 'Match')} · {_esc(s.get('date', ''))}</span>"
+                f"<span style='color:{color}'>{r['performance_score']}/100</span></div>",
                 unsafe_allow_html=True,
             )
 
-        with st.container(border=True):
-            st.markdown("**📊 Detailed Breakdown**")
-            st.plotly_chart(radar_chart(r["radar"]), config={"displayModeBar": False}, **CHART_STRETCH)
+# ══════════════════════════════════════════════════════════════════════════
+# HISTORY
+# ══════════════════════════════════════════════════════════════════════════
+elif page == "History":
+    sub = ss.sub
+    vs = ss.viewing_session
+    if vs is not None and (not isinstance(vs, int) or not (0 <= vs < len(sessions))):
+        ss.viewing_session = None
+        vs = None
 
+    if vs is None:
+        page_title("📋 Match History", "Every match logged. Tap one to open it.")
+        if not sessions:
+            st.info("No sessions saved yet. Analyze a match first!")
+            hub_go("analyze_first", "🎥  Analyze a match", "Analyze")
+        else:
+            newest_first = list(reversed(list(enumerate(sessions))))
+            chunk, cur, pages = paginate(newest_first, 4, "history")
+            for i, s in chunk:
+                r = normalize_report(s.get("ai_report"))
+                label = f"{s.get('opponent') or 'Match'}  ·  {s.get('date', '')}  ·  {r['performance_score']}/100"
+                st.button(label, key=f"hub_match_{i}", on_click=_open_match, args=(i,))
+            pager("history", cur, pages)
+    else:
+        s = sessions[vs]
+        r = normalize_report(s.get("ai_report"))
+        title = s.get("opponent") or "Match"
+        if sub is None:
+            sub_header(title, f"{s.get('date', '')} · {s.get('position', '')}", back=_close_match)
+            if s.get("analyzed_from_video"):
+                st.markdown("<span class='badge badge-cyan'>📹 Analyzed from video</span>", unsafe_allow_html=True)
+            rcolor = score_color(r["overall_rating"], 10)
+            st.markdown(
+                f"<div style='text-align:center'><div style='color:var(--muted)'>OVERALL RATING</div>"
+                f"<div style='font-family:Sora,sans-serif;font-weight:800;font-size:2.4rem;color:{rcolor}'>{r['overall_rating']:.1f}</div></div>",
+                unsafe_allow_html=True,
+            )
+            hub_btn("findings", "🧠  AI findings")
+            hub_btn("mstats", "📈  Match stats")
+            hub_btn("breakdown", "📊  Detailed breakdown")
+            hub_btn("mdrills", "📋  Recommended drills")
+            vid_path = os.path.join(UPLOAD_DIR, s["video_filename"]) if s.get("video_filename") else None
+            if vid_path and os.path.exists(vid_path):
+                hub_btn("video", "🎥  Watch video")
+
+        elif sub == "findings":
+            sub_header("🧠 AI findings", title)
+            st.write(f"**Strengths:** {r['strengths']}")
+            st.write(f"**Improvement:** {r['improvement']}")
+            st.write(f"**Tactical Insight:** {r['tactical_insight']}")
+            st.write(f"**Key Moment:** {r['key_moment']}")
+            st.markdown(f"<div class='quote-box'>⭐ {_esc(r['key_takeaway'])}</div>", unsafe_allow_html=True)
+
+        elif sub == "mstats":
+            sub_header("📈 Match stats", title)
+            stat_pairs = [
+                ("Goals", s.get("goals")), ("Assists", s.get("assists")),
+                ("Shots on Target", s.get("shots_on_target")),
+                ("Dribble Success", f"{s.get('dribble_pct')}%" if s.get("dribble_pct") is not None else "—"),
+                ("Key Passes", s.get("key_passes")),
+                ("Tackles Won", s.get("tackles_won")), ("Duels Won", s.get("duels_won")),
+                ("Possession Won", s.get("possession_won")), ("Distance", f"{s.get('distance_km')} km"),
+                ("Sprints", s.get("sprints")), ("Yellow Cards", s.get("yellow_cards")),
+                ("Red Cards", s.get("red_cards")),
+            ]
+            rows = "".join(f"<div class='stat-row'><span>{k}</span><span>{'—' if v is None else v}</span></div>" for k, v in stat_pairs)
+            st.markdown(rows, unsafe_allow_html=True)
+
+        elif sub == "breakdown":
+            sub_header("📊 Detailed breakdown", title)
+            st.plotly_chart(radar_chart(r["radar"], height=300), config={"displayModeBar": False}, **CHART_STRETCH)
             da = r["decision_analysis"]
-            st.markdown("**⚖️ Decision Analysis**")
             for label, pct, color in [("Good Decisions", da["good_pct"], "var(--green)"),
                                        ("Average Decisions", da["average_pct"], "var(--amber)"),
                                        ("Poor Decisions", da["poor_pct"], "var(--red)")]:
@@ -1685,44 +1811,57 @@ elif page == "History":
                     unsafe_allow_html=True,
                 )
 
-        with st.container(border=True):
-            st.markdown("**📋 Recommended Drills**")
+        elif sub == "mdrills":
+            sub_header("📋 Recommended drills", title)
             for d in r.get("recommended_drills", []):
                 st.write(f"• {d}")
             st.markdown(f"<div class='quote-box'>🗣️ {_esc(r['message'])}</div>", unsafe_allow_html=True)
+
+        elif sub == "video":
+            sub_header("🎥 Match video", title)
+            vid_path = os.path.join(UPLOAD_DIR, s.get("video_filename") or "")
+            if s.get("video_filename") and os.path.exists(vid_path):
+                st.video(vid_path)
+            else:
+                st.info("This video is no longer stored.")
 
 # ══════════════════════════════════════════════════════════════════════════
 # CHAT
 # ══════════════════════════════════════════════════════════════════════════
 elif page == "Chat":
-    page_title("💬 Chat With Your Coach", "Tactics, advice, motivation — ask anything.")
+    sub = ss.sub
+    if "chat_history" not in ss:
+        ss.chat_history = []
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+    if sub == "earlier":
+        sub_header("🕑 Earlier messages")
+        pairs = list(reversed(ss.chat_history[:-2]))
+        chunk, cur, pages = paginate(pairs, 4, "chat")
+        for message in chunk:
+            avatar = "🧑" if message["role"] == "user" else "⚽"
+            st.chat_message(message["role"], avatar=avatar).write(message["content"])
+        pager("chat", cur, pages)
+    else:
+        page_title("💬 Chat With Your Coach", "Tactics, advice, motivation — ask anything.")
+        user_input = st.chat_input("Ask your coach something...")
+        if user_input:
+            ss.chat_history.append({"role": "user", "content": user_input})
+            messages = [{"role": "system", "content": "You are an elite UEFA Pro License football coach. Answer all questions with specific, practical football advice. Be direct, motivating and knowledgeable. Keep answers under about 120 words unless the player asks for more detail."}]
+            messages.extend(ss.chat_history[-20:])  # keep requests a sane size
+            with st.spinner("Coach is thinking..."):
+                try:
+                    response = client.chat.completions.create(model=MODEL, messages=messages)
+                    coach_reply = response.choices[0].message.content or ""
+                except Exception as e:
+                    coach_reply = ""
+                    st.error(f"Your coach couldn't reply right now: {e}")
+            if coach_reply:
+                ss.chat_history.append({"role": "assistant", "content": coach_reply})
+            else:
+                ss.chat_history.pop()  # drop the unanswered question so history stays alternating
 
-    for message in st.session_state.chat_history:
-        avatar = "🧑" if message["role"] == "user" else "⚽"
-        st.chat_message(message["role"], avatar=avatar).write(message["content"])
-
-    user_input = st.chat_input("Ask your coach something...")
-    if user_input:
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        st.chat_message("user", avatar="🧑").write(user_input)
-
-        messages = [{"role": "system", "content": "You are an elite UEFA Pro License football coach. Answer all questions with specific, practical football advice. Be direct, motivating and knowledgeable."}]
-        messages.extend(st.session_state.chat_history[-20:])  # keep requests a sane size
-
-        with st.spinner("Coach is thinking..."):
-            try:
-                response = client.chat.completions.create(model=MODEL, messages=messages)
-                coach_reply = response.choices[0].message.content or ""
-            except Exception as e:
-                coach_reply = None
-                st.error(f"Your coach couldn't reply right now: {e}")
-
-        if coach_reply:
-            st.session_state.chat_history.append({"role": "assistant", "content": coach_reply})
-            st.chat_message("assistant", avatar="⚽").write(coach_reply)
-        else:
-            st.session_state.chat_history.pop()  # drop the unanswered question so history stays alternating
-        st.chat_message("assistant", avatar="⚽").write(coach_reply)
+        for message in ss.chat_history[-2:]:
+            avatar = "🧑" if message["role"] == "user" else "⚽"
+            st.chat_message(message["role"], avatar=avatar).write(message["content"])
+        if len(ss.chat_history) > 2:
+            hub_btn("earlier", "🕑  Earlier messages")
