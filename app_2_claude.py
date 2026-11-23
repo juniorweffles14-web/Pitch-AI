@@ -270,7 +270,12 @@ def send_reset_code(receiver_email, code):
         </html>
         """
 
-        msg.attach(MIMEText(html_body, "html"))
+        plain_body = (
+            f"Your Pitch AI reset code is: {code}\n\n"
+            f"It expires in {RESET_CODE_TTL_SECONDS // 60} minutes. If you did not request this, ignore this email."
+        )
+        msg.attach(MIMEText(plain_body, "plain", "utf-8"))  # plain-text part helps avoid spam filters
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as server:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
@@ -278,8 +283,14 @@ def send_reset_code(receiver_email, code):
 
         return True
 
-    except Exception:
-        st.error("Couldn't send the reset email. Please try again later.")
+    except smtplib.SMTPAuthenticationError:
+        print("[reset email] Gmail rejected SENDER_EMAIL / SENDER_PASSWORD")
+        st.error("Gmail rejected the login. Check that SENDER_EMAIL and SENDER_PASSWORD "
+                 "(a Gmail app password) are correct in your secrets.")
+        return False
+    except Exception as e:
+        print(f"[reset email] {type(e).__name__}: {e}")
+        st.error(f"Couldn't send the reset email ({type(e).__name__}). Please try again later.")
         return False
 
 
@@ -296,17 +307,34 @@ def _reset_request_log():
     return {}  # shared across sessions for the life of the server process
 
 
-def _reset_rate_ok(username, max_per_hour=3):
-    """Limit reset emails per username (counted for any typed name, so it doesn't reveal which exist)."""
+def _reset_rate_allowed(username, max_per_hour=3):
+    """True if fewer than max_per_hour reset emails were sent to this account in the last hour."""
     now = time.time()
     log = _reset_request_log()
-    hits = [t for t in log.get(username, []) if now - t < 3600]
-    if len(hits) >= max_per_hour:
-        log[username] = hits
-        return False
-    hits.append(now)
-    log[username] = hits
-    return True
+    log[username] = [x for x in log.get(username, []) if now - x < 3600]
+    return len(log[username]) < max_per_hour
+
+
+def _reset_rate_record(username):
+    _reset_request_log().setdefault(username, []).append(time.time())
+
+
+def _find_account(usernames, text):
+    """Match what the person typed to an account: username (any case) or email address."""
+    text = text.strip()
+    if text in usernames:
+        return text
+    if text.lower() in usernames:
+        return text.lower()
+    for key, data in usernames.items():
+        if str((data or {}).get("email", "")).strip().lower() == text.lower() and text:
+            return key
+    return None
+
+
+def _mask_email(email):
+    name, _, domain = email.partition("@")
+    return (name[:1] + "*" * max(len(name) - 1, 2) + "@" + domain) if domain else email
 
 
 def _password_problem(pw):
@@ -378,6 +406,21 @@ AUTH_CSS = """
 .block-container{ max-width:560px !important; margin-left:auto !important; margin-right:auto !important; }
 .st-key-auth_back button{ background:transparent !important; color:#8b98ad !important;
   border:1px solid rgba(34,211,238,.25) !important; }
+/* Log in / Register / Send code / Reset buttons: light blue with dark blue text; inverted on hover */
+.stApp div[data-testid="stFormSubmitButton"] button,
+.stApp .st-key-send_code_btn button, .stApp .st-key-reset_final_btn button{
+  width:100%; min-height:3rem; border-radius:12px !important; font-weight:800 !important;
+  background:#8fdcff !important; color:#06224a !important; border:2px solid #8fdcff !important;
+  transition:background .15s, color .15s; }
+.stApp div[data-testid="stFormSubmitButton"] button *,
+.stApp .st-key-send_code_btn button *, .stApp .st-key-reset_final_btn button *{
+  color:#06224a !important; font-weight:800 !important; }
+.stApp div[data-testid="stFormSubmitButton"] button:hover,
+.stApp .st-key-send_code_btn button:hover, .stApp .st-key-reset_final_btn button:hover{
+  background:#06224a !important; color:#8fdcff !important; border-color:#8fdcff !important; }
+.stApp div[data-testid="stFormSubmitButton"] button:hover *,
+.stApp .st-key-send_code_btn button:hover *, .stApp .st-key-reset_final_btn button:hover *{
+  color:#8fdcff !important; }
 div[data-testid="stVerticalBlockBorderWrapper"]{ background:rgba(8,16,30,.82); border-radius:16px; backdrop-filter:blur(6px); }
 </style>
 """
@@ -512,37 +555,38 @@ if st.session_state.get("authentication_status") is not True:
             st.button("Already have an account? Log in", key="to_login", on_click=_set_auth_view, args=("login",))
         else:  # reset
             st.subheader("🔐 Reset Password")
-            st.write("Enter your username and we'll send a reset code to your registered email.")
+            st.write("Enter your username or email and we'll send a reset code to your registered email.")
 
-            reset_username = st.text_input("Username", key="reset_username_input").strip()
+            reset_username = st.text_input("Username or email", key="reset_username_input").strip()
 
             if st.button("Send Reset Code 📧", key="send_code_btn"):
                 if not reset_username:
-                    st.error("Please enter your username.")
+                    st.error("Please enter your username or email.")
                 else:
                     usernames = config["credentials"]["usernames"]
-                    account_key = reset_username if reset_username in usernames else reset_username.lower()
-                    user_data = usernames.get(account_key)
+                    account_key = _find_account(usernames, reset_username)
+                    user_data = usernames.get(account_key) if account_key else None
                     user_email = (user_data or {}).get("email", "")
 
                     _clear_reset_state()
-                    sent_ok = True
-                    if not _reset_rate_ok(reset_username.lower()):
-                        st.error("Too many reset requests. Please wait a while and try again.")
-                        sent_ok = False
-                    elif user_data and user_email:
+                    if not user_data:
+                        st.error("We couldn't find an account with that username or email. "
+                                 "Check the spelling, or create a new account.")
+                    elif not user_email:
+                        st.error("That account has no email address on file, so a code can't be sent.")
+                    elif not _reset_rate_allowed(account_key):
+                        st.error("Too many reset emails were sent for this account. Please wait an hour and try again.")
+                    else:
                         code = str(secrets.randbelow(900000) + 100000)
-                        sent_ok = send_reset_code(user_email, code)
-                        if sent_ok:
+                        if send_reset_code(user_email, code):  # shows its own error if sending fails
+                            _reset_rate_record(account_key)
                             st.session_state.reset_code = code
                             st.session_state.reset_code_username = account_key
                             st.session_state.reset_code_expiry = time.time() + RESET_CODE_TTL_SECONDS
-
-                    if sent_ok:
-                        # Same message whether or not the account exists, so usernames can't be probed.
-                        st.success("If that account exists and has an email on file, a reset code has been sent.")
-                        st.session_state.reset_code_sent = True
-                        st.session_state.reset_attempts = 0
+                            st.session_state.reset_code_sent = True
+                            st.session_state.reset_attempts = 0
+                            st.success(f"A reset code was sent to {_mask_email(user_email)}. "
+                                       "It can take a minute, so check your spam folder too.")
 
             if st.session_state.get("reset_code_sent"):
                 st.divider()
