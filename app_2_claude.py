@@ -70,7 +70,7 @@ try:
 except Exception:
     PAGE_ICON = "⚽"
 
-st.set_page_config(page_title="Pitch AI", page_icon=PAGE_ICON, layout="centered")
+st.set_page_config(page_title="Pitch AI", page_icon=PAGE_ICON, layout="wide", initial_sidebar_state="collapsed")
 
 # ══════════════════════════════════════════════════════════════════════════
 # THEME — injected first so the login/signup page is styled too
@@ -214,6 +214,18 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.hero-marker) div[data-testi
 """
 st.markdown(CSS, unsafe_allow_html=True)
 
+# Fluid layout: fills the screen on phones and tablets; on big desktop monitors the content is
+# kept to a readable width in the middle while the background still covers the whole screen.
+RESPONSIVE_CSS = """
+<style>
+.block-container{ width:100%; max-width:100% !important;
+  padding-left:clamp(.8rem,4vw,2.5rem) !important; padding-right:clamp(.8rem,4vw,2.5rem) !important; }
+@media (min-width:1100px){ .block-container{ max-width:1100px !important; margin-left:auto !important; margin-right:auto !important; } }
+img, video{ max-width:100%; }
+</style>
+"""
+st.markdown(RESPONSIVE_CSS, unsafe_allow_html=True)
+
 # ══════════════════════════════════════════════════════════════════════════
 # PASSWORD RESET — emailed verification code
 # ══════════════════════════════════════════════════════════════════════════
@@ -314,6 +326,19 @@ def _plain_data_uri(path, mtime):
 
 
 @st.cache_data(show_spinner=False)
+def _hero_bg_uri(path, mtime):
+    """The landing photo as a small JPEG data URI (the PNG is ~1 MB) for use as a full-screen background."""
+    try:
+        im = Image.open(path).convert("RGB")
+        im.thumbnail((1000, 1400))
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=80, optimize=True)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return _plain_data_uri(path, mtime)
+
+
+@st.cache_data(show_spinner=False)
 def _logo_data_uri(path, mtime):
     """logo.png with its empty transparent margin trimmed off, as a data URI ('' if it can't be read)."""
     try:
@@ -350,18 +375,18 @@ AUTH_SUBTITLES = {
 
 AUTH_CSS = """
 <style>
+.block-container{ max-width:560px !important; margin-left:auto !important; margin-right:auto !important; }
 .st-key-auth_back button{ background:transparent !important; color:#8b98ad !important;
   border:1px solid rgba(34,211,238,.25) !important; }
+div[data-testid="stVerticalBlockBorderWrapper"]{ background:rgba(8,16,30,.82); border-radius:16px; backdrop-filter:blur(6px); }
 </style>
 """
 
 WELCOME_CSS = """
 <style>
-.stApp{ background:linear-gradient(180deg,#000d1a 0%,#021724 100%) fixed !important; }
-.block-container{ padding-top:1rem !important; }
-.welcome-hero img{ width:100%; display:block; max-height:58vh; object-fit:cover; object-position:center 35%;
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 5%,#000 92%,transparent 100%);
-  mask-image:linear-gradient(to bottom,transparent 0,#000 5%,#000 92%,transparent 100%); }
+.block-container{ padding-top:1rem !important; padding-bottom:1rem !important; max-width:100% !important; }
+.welcome-spacer{ height:calc(100vh - 18rem); height:calc(100dvh - 18rem); min-height:14rem; }
+.st-key-welcome_start, .st-key-welcome_login{ align-self:center; width:min(86%,420px) !important; }
 .st-key-welcome_start button, .st-key-welcome_login button{
   width:100%; height:3.3rem; border-radius:999px !important; font-weight:800 !important; letter-spacing:.08em; }
 .st-key-welcome_start button{ background:#00e5ff !important; color:#03121c !important; border:none !important; }
@@ -373,38 +398,47 @@ WELCOME_CSS = """
 """
 
 
-# Puts the two buttons ON the bottom of the photo (a dark fade keeps them readable).
-OVERLAY_CSS = """
+def _hero_background_css(uri, dim):
+    """Full-screen photo behind the page. dim 0 = as-is, higher = darker (for forms). The side fades
+    blend the portrait photo into the page colour on wide screens."""
+    return f"""
 <style>
-.block-container{ padding-bottom:1rem !important; }
-.welcome-hero{ position:relative; }
-.welcome-hero img{ max-height:82vh; }
-.welcome-hero::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:11rem; pointer-events:none;
-  background:linear-gradient(to top, rgba(0,13,26,.92) 0%, rgba(0,13,26,.55) 55%, transparent 100%); }
-.st-key-welcome_start, .st-key-welcome_login{ position:relative; z-index:5; align-self:center; width:86% !important; }
-.st-key-welcome_start{ margin-top:-9.8rem !important; }
-</style>
-"""
+header[data-testid="stHeader"]{{ background:transparent !important; }}
+.stApp{{
+  background:
+    linear-gradient(to right,#000d1a 0%,rgba(0,13,26,0) 22%,rgba(0,13,26,0) 78%,#000d1a 100%),
+    linear-gradient(rgba(0,13,26,{dim}),rgba(0,13,26,{dim})),
+    url("{uri}") center top / auto 100% no-repeat,
+    #000d1a !important;
+  background-attachment:fixed !important;
+}}
+</style>"""
+
+
+def apply_auth_background():
+    """Same photo as the welcome screen, dimmed, behind the log-in / sign-up / reset forms."""
+    hero = _find_asset("landing_hero.png", "landing_hero.jpg")
+    if hero:
+        st.markdown(_hero_background_css(_hero_bg_uri(hero, os.path.getmtime(hero)), 0.8), unsafe_allow_html=True)
+    else:
+        st.markdown("<style>.stApp{ background:linear-gradient(180deg,#000d1a 0%,#021724 100%) fixed !important; }</style>",
+                    unsafe_allow_html=True)
 
 
 def render_welcome():
-    """First screen: GET STARTED -> sign-up screen, LOG IN -> log-in screen."""
+    """First screen: full-screen photo with GET STARTED -> sign-up and LOG IN -> log-in on top of it."""
     st.markdown(WELCOME_CSS, unsafe_allow_html=True)
     hero = _find_asset("landing_hero.png", "landing_hero.jpg")
-    _, mid, _ = st.columns([1, 2.4, 1])
-    with mid:
-        if hero:
-            uri = _plain_data_uri(hero, os.path.getmtime(hero))
-            st.markdown(f'<div class="welcome-hero"><img src="{uri}" alt="Pitch AI Coach"></div>', unsafe_allow_html=True)
-            st.markdown(OVERLAY_CSS, unsafe_allow_html=True)
-        else:
-            st.markdown(
-                logo_html(120, center=True)
-                + '<div class="auth-sub">Analyze. Train. Improve.<br>Your Personal AI Soccer Coach.</div>',
-                unsafe_allow_html=True,
-            )
-        st.button("GET STARTED", key="welcome_start", on_click=_set_auth_view, args=("signup",))
-        st.button("LOG IN", key="welcome_login", on_click=_set_auth_view, args=("login",))
+    if hero:
+        st.markdown(_hero_background_css(_hero_bg_uri(hero, os.path.getmtime(hero)), 0), unsafe_allow_html=True)
+        st.markdown('<div class="welcome-spacer"></div>', unsafe_allow_html=True)
+    else:
+        st.markdown("<style>.stApp{ background:linear-gradient(180deg,#000d1a 0%,#021724 100%) fixed !important; }</style>"
+                    + logo_html(120, center=True)
+                    + '<div class="auth-sub">Analyze. Train. Improve.<br>Your Personal AI Soccer Coach.</div>',
+                    unsafe_allow_html=True)
+    st.button("GET STARTED", key="welcome_start", on_click=_set_auth_view, args=("signup",))
+    st.button("LOG IN", key="welcome_login", on_click=_set_auth_view, args=("login",))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -448,6 +482,7 @@ if st.session_state.get("authentication_status") is not True:
         st.stop()
 
     st.markdown(AUTH_CSS, unsafe_allow_html=True)
+    apply_auth_background()
     st.button("← Back", key="auth_back", on_click=_set_auth_view, args=("login" if auth_view == "reset" else "welcome",))
     st.markdown(logo_html(110, center=True), unsafe_allow_html=True)
     st.markdown(f'<div class="auth-sub">{AUTH_SUBTITLES[auth_view]}</div>', unsafe_allow_html=True)
