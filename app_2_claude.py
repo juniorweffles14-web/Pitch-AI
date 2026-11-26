@@ -22,6 +22,7 @@ try:
 except ImportError:  # app still works (without video frames) if OpenCV is missing
     cv2 = None
 from email.mime.text import MIMEText
+from email.utils import formataddr, formatdate, make_msgid
 from email.mime.multipart import MIMEMultipart
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -236,7 +237,7 @@ MIN_PASSWORD_LEN = 8
 # Set these in .streamlit/secrets.toml (or as environment variables):
 #   SENDER_EMAIL = "you@gmail.com"
 #   SENDER_PASSWORD = "your-new-gmail-app-password"
-SENDER_EMAIL = _secret("SENDER_EMAIL")
+SENDER_EMAIL = str(_secret("SENDER_EMAIL")).strip()
 SENDER_PASSWORD = str(_secret("SENDER_PASSWORD")).replace(" ", "")
 
 
@@ -247,8 +248,11 @@ def send_reset_code(receiver_email, code):
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "Your Pitch AI reset code"
-        msg["From"] = SENDER_EMAIL
+        msg["From"] = formataddr(("Pitch AI", SENDER_EMAIL))
         msg["To"] = receiver_email
+        msg["Reply-To"] = SENDER_EMAIL
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain=SENDER_EMAIL.split("@")[-1] or "pitchai.app")
 
         html_body = f"""
         <html>
@@ -279,8 +283,13 @@ def send_reset_code(receiver_email, code):
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as server:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
+            refused = server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
 
+        if refused:  # sendmail returns the recipients the server refused
+            print(f"[reset email] recipient refused: {list(refused)}")
+            st.error("The mail server refused that email address. Check the address on the account.")
+            return False
+        print(f"[reset email] handed to Gmail for {_mask_email(receiver_email)}")
         return True
 
     except smtplib.SMTPAuthenticationError:
@@ -570,6 +579,7 @@ if st.session_state.get("authentication_status") is not True:
 
                     _clear_reset_state()
                     if not user_data:
+                        print(f"[reset email] no account matches {reset_username[:3]}...")
                         st.error("We couldn't find an account with that username or email. "
                                  "Check the spelling, or create a new account.")
                     elif not user_email:
